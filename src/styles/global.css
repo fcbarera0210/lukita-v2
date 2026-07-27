@@ -3,36 +3,45 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
+  --font-display: "Syne", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+
   --color-brand-green: #96e148;
   --color-brand-cyan: #00c6db;
   --color-brand-ink: #375a64;
-  --color-background: #f8fafb;
-  --color-foreground: #375a64;
+  --color-background: #f4f8f9;
+  --color-foreground: #2a4550;
   --color-card: #ffffff;
-  --color-card-foreground: #375a64;
-  --color-muted: #eef2f4;
+  --color-card-foreground: #2a4550;
+  --color-muted: #e8eef1;
   --color-muted-foreground: #5f7a84;
-  --color-border: #d7e0e4;
+  --color-border: #d0dce4;
   --color-primary: #00c6db;
-  --color-primary-foreground: #ffffff;
+  --color-primary-foreground: #062026;
   --color-destructive: #ef4444;
   --color-destructive-foreground: #ffffff;
   --color-ring: #00c6db;
-  --radius-lg: 0.75rem;
+  --color-success: #16a34a;
+  --color-sidebar: #ffffff;
+  --color-sidebar-foreground: #2a4550;
+  --radius-lg: 0.875rem;
 }
 
 .dark {
-  --color-background: #0f171a;
+  --color-background: #0c1417;
   --color-foreground: #e8f0f3;
-  --color-card: #162227;
+  --color-card: #142024;
   --color-card-foreground: #e8f0f3;
-  --color-muted: #1e2c32;
-  --color-muted-foreground: #9bb0b8;
-  --color-border: #2a3b42;
+  --color-muted: #1a2a30;
+  --color-muted-foreground: #8fa5ae;
+  --color-border: #243840;
   --color-primary: #00c6db;
   --color-primary-foreground: #062026;
   --color-destructive: #f87171;
   --color-destructive-foreground: #1a0a0a;
+  --color-success: #4ade80;
+  --color-sidebar: #0f1a1e;
+  --color-sidebar-foreground: #e8f0f3;
 }
 
 html,
@@ -41,16 +50,98 @@ body {
   min-height: 100%;
   background: var(--color-background);
   color: var(--color-foreground);
-  font-family: "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
 }
 
 body {
   background-image:
-    radial-gradient(ellipse 80% 50% at 0% -20%, color-mix(in oklab, var(--color-brand-green) 18%, transparent), transparent),
-    radial-gradient(ellipse 70% 40% at 100% 0%, color-mix(in oklab, var(--color-brand-cyan) 16%, transparent), transparent);
+    radial-gradient(ellipse 90% 55% at 0% -15%, color-mix(in oklab, var(--color-brand-green) 22%, transparent), transparent),
+    radial-gradient(ellipse 75% 45% at 100% 0%, color-mix(in oklab, var(--color-brand-cyan) 20%, transparent), transparent),
+    radial-gradient(ellipse 50% 40% at 50% 100%, color-mix(in oklab, var(--color-brand-ink) 8%, transparent), transparent);
   background-attachment: fixed;
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
 }
 
 .brand-gradient {
   background-image: linear-gradient(135deg, var(--color-brand-green), var(--color-brand-cyan));
+}
+
+.surface {
+  border: 1px solid var(--color-border);
+  background: color-mix(in oklab, var(--color-card) 92%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+@keyframes lukita-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes lukita-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes lukita-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-fade-up {
+  animation: lukita-fade-up 0.4s ease-out both;
+}
+
+.animate-fade-up-delay-1 {
+  animation: lukita-fade-up 0.4s ease-out 0.06s both;
+}
+
+.animate-fade-up-delay-2 {
+  animation: lukita-fade-up 0.4s ease-out 0.12s both;
+}
+
+.animate-fade-up-delay-3 {
+  animation: lukita-fade-up 0.4s ease-out 0.18s both;
+}
+
+.animate-toast-in {
+  animation: lukita-toast-in 0.28s ease-out both;
+}
+
+.animate-spin-slow {
+  animation: lukita-spin 0.7s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up,
+  .animate-fade-up-delay-1,
+  .animate-fade-up-delay-2,
+  .animate-fade-up-delay-3,
+  .animate-toast-in {
+    animation: none;
+  }
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.22s;
 }

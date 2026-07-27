@@ -157,10 +157,14 @@ export const POST: APIRoute = async ({ request, locals, redirect }) => {
       default:
         throw new Error('Acción desconocida');
     }
-    return redirect(returnTo);
+    const hasFeedback = /[?&](ok|success|error)=/.test(returnTo);
+    if (hasFeedback) return redirect(returnTo);
+    const sep = returnTo.includes('?') ? '&' : '?';
+    return redirect(`${returnTo}${sep}ok=1`);
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Error';
-    const sep = returnTo.includes('?') ? '&' : '?';
-    return redirect(`${returnTo}${sep}error=${encodeURIComponent(msg)}`);
+    const cleaned = returnTo.replace(/([?&])(ok|success)=[^&]*/g, '$1').replace(/[?&]$/, '');
+    const sep = cleaned.includes('?') ? '&' : '?';
+    return redirect(`${cleaned}${sep}error=${encodeURIComponent(msg)}`);
   }
 };

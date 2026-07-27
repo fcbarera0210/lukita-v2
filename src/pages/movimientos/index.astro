@@ -1,12 +1,12 @@
 ---
 import AppLayout from '../../layouts/AppLayout.astro';
 import { MoneyMovementForm } from '../../components/MoneyMovementForm';
+import { MovementDrawer } from '../../components/MovementDrawer';
 import { formatCLP } from '../../lib/clp';
 import { formatDate } from '../../lib/dates';
 import { listAccounts, listCategories, listSavings, listTransactions } from '../../lib/data';
 
 const user = Astro.locals.user!;
-const error = Astro.url.searchParams.get('error');
 const type = (Astro.url.searchParams.get('type') || '') as '' | 'ingreso' | 'gasto';
 const accountId = Astro.url.searchParams.get('accountId') || '';
 const note = Astro.url.searchParams.get('note') || '';
@@ -39,90 +39,169 @@ try {
 } catch {}
 
 const editing = editId ? txs.find((t) => t.id === editId) : undefined;
-const returnQs = Astro.url.search;
----
-<AppLayout title="Movimientos · Lukita">
-  <div class="mb-4 flex items-center justify-between gap-2">
-    <h1 class="text-xl font-semibold">Movimientos</h1>
-    <a href="/movimientos?new=1" class="rounded-lg bg-[var(--color-primary)] px-3 py-2 text-sm font-medium text-[var(--color-primary-foreground)]">Nuevo</a>
-  </div>
-  {error && <p class="mb-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{error}</p>}
+const formAccounts = accounts.map((a) => ({ id: a.id, name: a.name }));
+const formCategories = categories.map((c) => ({ id: c.id, name: c.name }));
+const formSavings = savings.map((s) => ({ id: s.id, name: s.name, categoryId: s.categoryId }));
+const formInitial = editing
+  ? {
+      id: editing.id,
+      type: editing.type as 'gasto' | 'ingreso',
+      amount: editing.amount,
+      date: new Date(editing.date).toISOString().slice(0, 10),
+      accountId: editing.accountId,
+      categoryId: editing.categoryId,
+      note: editing.note || '',
+      savingsId: editing.savingsId,
+    }
+  : undefined;
 
-  <form method="GET" class="mb-4 grid grid-cols-2 gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3">
-    <select name="type" class="h-9 rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm">
+const closeHref = '/movimientos';
+const formTitle = editing ? 'Editar movimiento' : 'Nuevo movimiento';
+---
+<AppLayout title="Movimientos · Lukita" pageTitle="Movimientos" pageDescription="Historial y filtros">
+  <a
+    slot="actions"
+    href="/movimientos?new=1"
+    class="brand-gradient inline-flex h-9 items-center rounded-xl px-3 text-sm font-semibold text-[#163038] transition-opacity hover:opacity-90"
+  >
+    Nuevo
+  </a>
+
+  <form method="GET" class="animate-fade-up surface mb-5 grid grid-cols-2 gap-2 rounded-2xl p-3 lg:grid-cols-6">
+    <select name="type" class="h-10 rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm lg:col-span-1">
       <option value="">Todos</option>
       <option value="gasto" selected={type === 'gasto'}>Gasto</option>
       <option value="ingreso" selected={type === 'ingreso'}>Ingreso</option>
     </select>
-    <select name="accountId" class="h-9 rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm">
+    <select name="accountId" class="h-10 rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm lg:col-span-1">
       <option value="">Todas las cuentas</option>
       {accounts.map((a) => <option value={a.id} selected={a.id === accountId}>{a.name}</option>)}
     </select>
-    <input type="date" name="from" value={fromParam ? fromParam.slice(0, 10) : ''} class="h-9 rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm" />
-    <input type="date" name="to" value={toParam ? toParam.slice(0, 10) : ''} class="h-9 rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm" />
-    <input name="note" value={note} placeholder="Buscar nota" class="col-span-2 h-9 rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm" />
-    <button type="submit" class="col-span-2 h-9 rounded-lg bg-[var(--color-muted)] text-sm font-medium">Filtrar</button>
+    <input type="date" name="from" value={fromParam ? fromParam.slice(0, 10) : ''} class="h-10 rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm" />
+    <input type="date" name="to" value={toParam ? toParam.slice(0, 10) : ''} class="h-10 rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm" />
+    <input name="note" value={note} placeholder="Buscar nota" class="col-span-2 h-10 rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm lg:col-span-1" />
+    <button type="submit" class="col-span-2 h-10 rounded-xl bg-[var(--color-muted)] text-sm font-semibold transition-colors hover:opacity-90 lg:col-span-1">Filtrar</button>
   </form>
 
+  {/* Mobile inline form */}
   {showForm && (
-    <div class="mb-6 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+    <div class="animate-fade-up mb-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 lg:hidden">
       <div class="mb-3 flex items-center justify-between">
-        <h2 class="text-sm font-semibold">{editing ? 'Editar movimiento' : 'Nuevo movimiento'}</h2>
-        <a href="/movimientos" class="text-xs text-[var(--color-muted-foreground)]">Cerrar</a>
+        <h2 class="font-display text-base font-bold">{formTitle}</h2>
+        <a href={closeHref} class="text-xs font-medium text-[var(--color-muted-foreground)]">Cerrar</a>
       </div>
       <MoneyMovementForm
         client:load
-        accounts={accounts.map((a) => ({ id: a.id, name: a.name }))}
-        categories={categories.map((c) => ({ id: c.id, name: c.name }))}
-        savings={savings.map((s) => ({ id: s.id, name: s.name, categoryId: s.categoryId }))}
+        accounts={formAccounts}
+        categories={formCategories}
+        savings={formSavings}
         returnTo="/movimientos"
-        initial={editing ? {
-          id: editing.id,
-          type: editing.type as 'gasto' | 'ingreso',
-          amount: editing.amount,
-          date: new Date(editing.date).toISOString().slice(0, 10),
-          accountId: editing.accountId,
-          categoryId: editing.categoryId,
-          note: editing.note || '',
-          savingsId: editing.savingsId,
-        } : undefined}
+        initial={formInitial}
       />
     </div>
   )}
 
-  <div class="space-y-2">
+  {/* Desktop drawer */}
+  <div class="hidden lg:block">
+    <MovementDrawer
+      client:load
+      open={showForm}
+      title={formTitle}
+      closeHref={closeHref}
+      accounts={formAccounts}
+      categories={formCategories}
+      savings={formSavings}
+      returnTo="/movimientos"
+      initial={formInitial}
+    />
+  </div>
+
+  {/* Mobile cards */}
+  <div class="space-y-2 lg:hidden">
     {txs.length === 0 ? (
-      <p class="rounded-xl border border-dashed border-[var(--color-border)] p-6 text-center text-sm text-[var(--color-muted-foreground)]">No hay movimientos</p>
+      <p class="rounded-2xl border border-dashed border-[var(--color-border)] p-6 text-center text-sm text-[var(--color-muted-foreground)]">No hay movimientos</p>
     ) : (
       txs.map((t) => {
         const account = accounts.find((a) => a.id === t.accountId);
         const category = categories.find((c) => c.id === t.categoryId);
         return (
-          <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3">
+          <div class="surface rounded-2xl p-3">
             <div class="flex items-start justify-between gap-2">
-              <div>
-                <p class="text-sm font-medium">{t.note || category?.name || t.type}</p>
+              <div class="min-w-0">
+                <p class="truncate text-sm font-medium">{t.note || category?.name || t.type}</p>
                 <p class="text-xs text-[var(--color-muted-foreground)]">
                   {account?.name} · {formatDate(new Date(t.date))}
                   {t.savingsId ? ' · ahorro' : ''}
                 </p>
               </div>
-              <p class={`text-sm font-semibold ${t.type === 'ingreso' ? 'text-green-600' : 'text-red-600'}`}>
+              <p class={`shrink-0 text-sm font-semibold ${t.type === 'ingreso' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                 {formatCLP(t.amount)}
               </p>
             </div>
-            <div class="mt-2 flex gap-2">
-              <a href={`/movimientos?edit=${t.id}`} class="text-xs text-[var(--color-primary)]">Editar</a>
+            <div class="mt-2 flex gap-3">
+              <a href={`/movimientos?edit=${t.id}`} class="text-xs font-semibold text-[var(--color-primary)]">Editar</a>
               <form method="POST" action="/api/actions" onsubmit="return confirm('¿Eliminar?')">
                 <input type="hidden" name="intent" value="delete_transaction" />
                 <input type="hidden" name="returnTo" value="/movimientos" />
                 <input type="hidden" name="id" value={t.id} />
-                <button type="submit" class="text-xs text-red-600">Eliminar</button>
+                <button type="submit" class="text-xs font-semibold text-red-600 dark:text-red-400">Eliminar</button>
               </form>
             </div>
           </div>
         );
       })
+    )}
+  </div>
+
+  {/* Desktop table */}
+  <div class="animate-fade-up-delay-1 surface hidden overflow-hidden rounded-2xl lg:block">
+    {txs.length === 0 ? (
+      <p class="p-8 text-center text-sm text-[var(--color-muted-foreground)]">No hay movimientos</p>
+    ) : (
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[720px] text-left text-sm">
+          <thead class="border-b border-[var(--color-border)] bg-[var(--color-muted)]/40 text-xs uppercase tracking-wide text-[var(--color-muted-foreground)]">
+            <tr>
+              <th class="px-4 py-3 font-semibold">Fecha</th>
+              <th class="px-4 py-3 font-semibold">Tipo</th>
+              <th class="px-4 py-3 font-semibold">Monto</th>
+              <th class="px-4 py-3 font-semibold">Cuenta</th>
+              <th class="px-4 py-3 font-semibold">Categoría</th>
+              <th class="px-4 py-3 font-semibold">Nota</th>
+              <th class="px-4 py-3 font-semibold">Acciones</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-[var(--color-border)]">
+            {txs.map((t) => {
+              const account = accounts.find((a) => a.id === t.accountId);
+              const category = categories.find((c) => c.id === t.categoryId);
+              return (
+                <tr class="transition-colors hover:bg-[var(--color-muted)]/30">
+                  <td class="whitespace-nowrap px-4 py-3 text-[var(--color-muted-foreground)]">{formatDate(new Date(t.date))}</td>
+                  <td class="px-4 py-3 capitalize">{t.type}{t.savingsId ? ' · ahorro' : ''}</td>
+                  <td class={`px-4 py-3 font-semibold tabular-nums ${t.type === 'ingreso' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                    {formatCLP(t.amount)}
+                  </td>
+                  <td class="px-4 py-3">{account?.name || '—'}</td>
+                  <td class="px-4 py-3">{category?.name || '—'}</td>
+                  <td class="max-w-[180px] truncate px-4 py-3 text-[var(--color-muted-foreground)]">{t.note || '—'}</td>
+                  <td class="px-4 py-3">
+                    <div class="flex items-center gap-3">
+                      <a href={`/movimientos?edit=${t.id}`} class="font-semibold text-[var(--color-primary)]">Editar</a>
+                      <form method="POST" action="/api/actions" onsubmit="return confirm('¿Eliminar?')">
+                        <input type="hidden" name="intent" value="delete_transaction" />
+                        <input type="hidden" name="returnTo" value="/movimientos" />
+                        <input type="hidden" name="id" value={t.id} />
+                        <button type="submit" class="font-semibold text-red-600 dark:text-red-400">Eliminar</button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     )}
   </div>
 </AppLayout>

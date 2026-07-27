@@ -1,32 +1,28 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-
-const error = Astro.url.searchParams.get('error');
 ---
 <BaseLayout title="Iniciar sesión · Lukita">
-  <div class="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4 py-10">
-    <div class="mb-8 text-center">
-      <img src="/logo-lukita.svg" alt="Lukita" class="mx-auto h-10" />
-      <p class="mt-3 text-sm text-[var(--color-muted-foreground)]">Tus finanzas, claras y simples</p>
+  <div class="relative mx-auto flex min-h-dvh max-w-lg flex-col justify-center px-4 py-10">
+    <div class="animate-fade-up mb-10 text-center">
+      <img src="/logo-lukita.svg" alt="Lukita" class="mx-auto h-12" />
+      <p class="font-display mt-4 text-2xl font-bold tracking-tight">Lukita</p>
+      <p class="mt-2 text-sm text-[var(--color-muted-foreground)]">Tus finanzas, claras y simples</p>
     </div>
-    <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-6 shadow-sm">
-      {error && (
-        <p class="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">{error}</p>
-      )}
+    <div class="animate-fade-up-delay-1 surface rounded-2xl p-6 shadow-sm">
       <form method="POST" action="/api/auth" class="space-y-4">
         <input type="hidden" name="intent" value="login" />
         <div>
           <label class="mb-1.5 block text-sm font-medium" for="email">Email</label>
-          <input id="email" name="email" type="email" required class="flex h-10 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm" />
+          <input id="email" name="email" type="email" required class="flex h-11 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]" />
         </div>
         <div>
           <label class="mb-1.5 block text-sm font-medium" for="password">Contraseña</label>
-          <input id="password" name="password" type="password" minlength="6" required class="flex h-10 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm" />
+          <input id="password" name="password" type="password" minlength="6" required class="flex h-11 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]" />
         </div>
-        <button type="submit" class="brand-gradient h-10 w-full rounded-lg text-sm font-semibold text-[#163038]">Entrar</button>
+        <button type="submit" class="brand-gradient h-11 w-full rounded-xl text-sm font-semibold text-[#163038] transition-opacity hover:opacity-90">Entrar</button>
       </form>
-      <p class="mt-4 text-center text-sm text-[var(--color-muted-foreground)]">
-        ¿No tienes cuenta? <a href="/register" class="text-[var(--color-primary)]">Regístrate</a>
+      <p class="mt-5 text-center text-sm text-[var(--color-muted-foreground)]">
+        ¿No tienes cuenta? <a href="/register" class="font-medium text-[var(--color-primary)]">Regístrate</a>
       </p>
     </div>
   </div>

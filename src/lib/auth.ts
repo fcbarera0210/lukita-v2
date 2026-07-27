@@ -8,7 +8,7 @@ const COOKIE_NAME = 'lukita_session';
 const SESSION_DAYS = 30;
 
 function requireSecret() {
-  const secret = process.env.SESSION_SECRET;
+  const secret = import.meta.env.SESSION_SECRET;
   if (!secret || secret.length < 16) {
     throw new Error('SESSION_SECRET debe tener al menos 16 caracteres');
   }

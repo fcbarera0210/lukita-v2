@@ -1,28 +1,56 @@
 ---
 import BaseLayout from './BaseLayout.astro';
 import { BottomNav } from '../components/BottomNav';
+import { AppSidebar } from '../components/AppSidebar';
+import { UserMenu } from '../components/UserMenu';
 
 interface Props {
   title?: string;
+  pageTitle?: string;
+  pageDescription?: string;
 }
 
-const { title = 'Lukita' } = Astro.props;
+const { title = 'Lukita', pageTitle, pageDescription } = Astro.props;
 const user = Astro.locals.user;
 const path = Astro.url.pathname;
+const heading = pageTitle || title.replace(/\s·\sLukita$/, '');
 ---
 <BaseLayout title={title} user={user}>
-  <div class="mx-auto min-h-dvh max-w-lg pb-24">
-    <header class="sticky top-0 z-30 border-b border-[var(--color-border)] bg-[color-mix(in_oklab,var(--color-background)_88%,transparent)] px-4 py-3 backdrop-blur">
-      <div class="flex items-center gap-3">
-        <img src="/logo-lukita.svg" alt="Lukita" class="h-7" />
-        <div class="min-w-0 flex-1">
-          <p class="truncate text-sm text-[var(--color-muted-foreground)]">{user?.email}</p>
+  <div class="min-h-dvh lg:pl-60">
+    <AppSidebar client:load currentPath={path} />
+
+    <div class="mx-auto flex min-h-dvh max-w-6xl flex-col pb-24 lg:pb-8">
+      <header class="sticky top-0 z-30 border-b border-[var(--color-border)] bg-[color-mix(in_oklab,var(--color-background)_82%,transparent)] px-4 py-3 backdrop-blur-md sm:px-6">
+        <div class="flex items-center gap-3">
+          <div class="min-w-0 flex-1 lg:hidden">
+            <img src="/logo-lukita.svg" alt="Lukita" class="h-7" />
+          </div>
+          <div class="hidden min-w-0 flex-1 lg:block">
+            <h1 class="font-display truncate text-xl font-bold tracking-tight">{heading}</h1>
+            {pageDescription && (
+              <p class="truncate text-sm text-[var(--color-muted-foreground)]">{pageDescription}</p>
+            )}
+          </div>
+          <div class="flex items-center gap-2 sm:gap-3">
+            <slot name="actions" />
+            {user && <UserMenu client:load email={user.email} />}
+          </div>
         </div>
-      </div>
-    </header>
-    <main class="px-4 py-4">
-      <slot />
-    </main>
+        <div class="mt-3 lg:hidden">
+          <h1 class="font-display text-xl font-bold tracking-tight">{heading}</h1>
+          {pageDescription && (
+            <p class="text-sm text-[var(--color-muted-foreground)]">{pageDescription}</p>
+          )}
+        </div>
+      </header>
+
+      <main class="flex-1 px-4 py-5 sm:px-6">
+        <slot />
+      </main>
+    </div>
   </div>
-  <BottomNav client:load currentPath={path} />
+
+  <div class="lg:hidden">
+    <BottomNav client:load currentPath={path} />
+  </div>
 </BaseLayout>

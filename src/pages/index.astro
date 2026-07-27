@@ -30,90 +30,105 @@ const totalBalance = accounts.reduce((s, a) => s + a.balance, 0);
 const fromIso = periodStart.toISOString();
 const toIso = periodEnd.toISOString();
 ---
-<AppLayout title="Inicio · Lukita">
+<AppLayout title="Inicio · Lukita" pageTitle="Inicio" pageDescription="Resumen de tu plata">
+  <a
+    slot="actions"
+    href="/movimientos?new=1"
+    class="brand-gradient inline-flex h-9 items-center rounded-xl px-3 text-sm font-semibold text-[#163038] transition-opacity hover:opacity-90"
+  >
+    Nuevo
+  </a>
+
   {loadError && (
-    <p class="mb-4 rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+    <p class="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
       {loadError}. Configura DATABASE_URL y ejecuta npm run db:push.
     </p>
   )}
 
-  <section class="mb-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4">
-    <p class="text-sm text-[var(--color-muted-foreground)]">Balance actual</p>
-    <p class="mt-1 text-3xl font-semibold tracking-tight">{formatCLP(totalBalance)}</p>
-  </section>
+  <div class="grid gap-4 lg:grid-cols-12">
+    <section class="animate-fade-up surface rounded-2xl p-5 lg:col-span-5">
+      <p class="text-sm text-[var(--color-muted-foreground)]">Balance actual</p>
+      <p class="font-display mt-2 text-4xl font-bold tracking-tight">{formatCLP(totalBalance)}</p>
+      <p class="mt-2 text-xs text-[var(--color-muted-foreground)]">
+        Suma de {accounts.length} cuenta{accounts.length === 1 ? '' : 's'}
+      </p>
+    </section>
 
-  <section class="mb-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4">
-    <div class="mb-3 flex items-center justify-between gap-2">
-      <a href={`/?p=${prevPivot.toISOString()}`} class="rounded-lg p-2 hover:bg-[var(--color-muted)]" aria-label="Periodo anterior">‹</a>
-      <div class="text-center">
-        <p class="text-sm font-medium">Periodo</p>
-        <p class="text-xs text-[var(--color-muted-foreground)]">{formatPeriodLabel(periodStart, periodEnd)}</p>
+    <section class="animate-fade-up-delay-1 surface rounded-2xl p-5 lg:col-span-7">
+      <div class="mb-4 flex items-center justify-between gap-2">
+        <a href={`/?p=${prevPivot.toISOString()}`} class="rounded-xl p-2 transition-colors hover:bg-[var(--color-muted)]" aria-label="Periodo anterior">‹</a>
+        <div class="text-center">
+          <p class="text-sm font-semibold">Periodo</p>
+          <p class="text-xs text-[var(--color-muted-foreground)]">{formatPeriodLabel(periodStart, periodEnd)}</p>
+        </div>
+        <a href={`/?p=${nextPivot.toISOString()}`} class="rounded-xl p-2 transition-colors hover:bg-[var(--color-muted)]" aria-label="Periodo siguiente">›</a>
       </div>
-      <a href={`/?p=${nextPivot.toISOString()}`} class="rounded-lg p-2 hover:bg-[var(--color-muted)]" aria-label="Periodo siguiente">›</a>
-    </div>
-    <div class="grid grid-cols-2 gap-3">
-      <div class="rounded-lg bg-[var(--color-muted)]/60 p-3">
-        <p class="text-xs text-[var(--color-muted-foreground)]">Ingresos</p>
-        <p class="mt-1 font-semibold text-green-600 dark:text-green-400">{formatCLP(summary.income)}</p>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="rounded-xl bg-[var(--color-muted)]/70 p-4">
+          <p class="text-xs text-[var(--color-muted-foreground)]">Ingresos</p>
+          <p class="mt-1 text-lg font-semibold text-green-600 dark:text-green-400">{formatCLP(summary.income)}</p>
+        </div>
+        <div class="rounded-xl bg-[var(--color-muted)]/70 p-4">
+          <p class="text-xs text-[var(--color-muted-foreground)]">Gastos</p>
+          <p class="mt-1 text-lg font-semibold text-red-600 dark:text-red-400">{formatCLP(summary.expense)}</p>
+        </div>
       </div>
-      <div class="rounded-lg bg-[var(--color-muted)]/60 p-3">
-        <p class="text-xs text-[var(--color-muted-foreground)]">Gastos</p>
-        <p class="mt-1 font-semibold text-red-600 dark:text-red-400">{formatCLP(summary.expense)}</p>
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <section class="mb-4">
-    <div class="mb-2 flex items-center justify-between">
-      <h2 class="text-sm font-semibold">Últimos movimientos</h2>
-      <a
-        href={`/movimientos?from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}`}
-        class="text-xs font-medium text-[var(--color-primary)]"
-      >
-        Ver más
-      </a>
-    </div>
-    <div class="space-y-2">
-      {recent.length === 0 ? (
-        <p class="rounded-xl border border-dashed border-[var(--color-border)] p-4 text-sm text-[var(--color-muted-foreground)]">
-          Sin movimientos aún. <a href="/movimientos" class="text-[var(--color-primary)]">Crear uno</a>
-        </p>
-      ) : (
-        recent.map((t) => (
-          <div class="flex items-center justify-between rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2.5">
-            <div>
-              <p class="text-sm font-medium">{t.note || t.type}</p>
-              <p class="text-xs text-[var(--color-muted-foreground)]">{formatDate(new Date(t.date))}</p>
-            </div>
-            <p class={`text-sm font-semibold ${t.type === 'ingreso' ? 'text-green-600' : 'text-red-600'}`}>
-              {formatCLP(t.amount)}
-            </p>
-          </div>
-        ))
-      )}
-    </div>
-  </section>
+    <section class="animate-fade-up-delay-2 lg:col-span-8">
+      <div class="mb-3 flex items-center justify-between">
+        <h2 class="font-display text-base font-bold">Últimos movimientos</h2>
+        <a
+          href={`/movimientos?from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}`}
+          class="text-xs font-semibold text-[var(--color-primary)]"
+        >
+          Ver más
+        </a>
+      </div>
+      <div class="surface overflow-hidden rounded-2xl">
+        {recent.length === 0 ? (
+          <p class="p-5 text-sm text-[var(--color-muted-foreground)]">
+            Sin movimientos aún. <a href="/movimientos?new=1" class="text-[var(--color-primary)]">Crear uno</a>
+          </p>
+        ) : (
+          <ul class="divide-y divide-[var(--color-border)]">
+            {recent.map((t) => (
+              <li class="flex items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-[var(--color-muted)]/40">
+                <div class="min-w-0">
+                  <p class="truncate text-sm font-medium">{t.note || t.type}</p>
+                  <p class="text-xs text-[var(--color-muted-foreground)]">{formatDate(new Date(t.date))}</p>
+                </div>
+                <p class={`shrink-0 text-sm font-semibold ${t.type === 'ingreso' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {formatCLP(t.amount)}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
 
-  <section>
-    <div class="mb-2 flex items-center justify-between">
-      <h2 class="text-sm font-semibold">Ahorros</h2>
-      <a href="/ahorros" class="text-xs font-medium text-[var(--color-primary)]">Ver ahorros</a>
-    </div>
-    <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3">
-      {savingsList.length === 0 ? (
-        <p class="text-sm text-[var(--color-muted-foreground)]">
-          Aún no tienes ahorros. <a href="/ahorros" class="text-[var(--color-primary)]">Crear</a>
-        </p>
-      ) : (
-        <ul class="space-y-2">
-          {savingsList.map((s) => (
-            <li class="flex items-center justify-between text-sm">
-              <span>{s.name}</span>
-              <span class="font-semibold">{formatCLP(s.total)}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  </section>
+    <section class="animate-fade-up-delay-3 lg:col-span-4">
+      <div class="mb-3 flex items-center justify-between">
+        <h2 class="font-display text-base font-bold">Ahorros</h2>
+        <a href="/ahorros" class="text-xs font-semibold text-[var(--color-primary)]">Ver todos</a>
+      </div>
+      <div class="surface rounded-2xl p-4">
+        {savingsList.length === 0 ? (
+          <p class="text-sm text-[var(--color-muted-foreground)]">
+            Aún no tienes ahorros. <a href="/ahorros" class="text-[var(--color-primary)]">Crear</a>
+          </p>
+        ) : (
+          <ul class="space-y-3">
+            {savingsList.map((s) => (
+              <li class="flex items-center justify-between gap-2 text-sm">
+                <span class="truncate">{s.name}</span>
+                <span class="font-semibold tabular-nums">{formatCLP(s.total)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  </div>
 </AppLayout>

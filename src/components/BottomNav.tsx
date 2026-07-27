@@ -21,11 +21,11 @@ export function BottomNav({ currentPath }: { currentPath: string }) {
   const secondaryActive = secondary.some((i) => currentPath.startsWith(i.href));
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--color-border)] bg-[var(--color-card)]">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--color-border)] bg-[color-mix(in_oklab,var(--color-card)_94%,transparent)] backdrop-blur-md">
       {moreOpen && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
-          <div className="absolute bottom-full left-0 right-0 z-50 border-t border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-lg">
+          <div className="fixed inset-0 z-40 bg-black/20" onClick={() => setMoreOpen(false)} />
+          <div className="animate-fade-up absolute bottom-full left-0 right-0 z-50 border-t border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-lg">
             <div className="mx-auto grid max-w-lg grid-cols-2 gap-2">
               {secondary.map((item) => {
                 const Icon = item.icon;
@@ -35,10 +35,10 @@ export function BottomNav({ currentPath }: { currentPath: string }) {
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      'flex flex-col items-center gap-1 rounded-lg p-3 text-xs',
+                      'flex flex-col items-center gap-1 rounded-xl p-3 text-xs font-medium transition-colors',
                       active
                         ? 'bg-[color-mix(in_oklab,var(--color-primary)_15%,transparent)] text-[var(--color-primary)]'
-                        : 'text-[var(--color-muted-foreground)]'
+                        : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)]'
                     )}
                   >
                     <Icon className="h-5 w-5" />
@@ -59,11 +59,11 @@ export function BottomNav({ currentPath }: { currentPath: string }) {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-lg p-2 text-[10px] font-medium',
+                'flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-lg p-2 text-[10px] font-medium transition-colors',
                 active ? 'text-[var(--color-primary)]' : 'text-[var(--color-muted-foreground)]'
               )}
             >
-              <Icon className="h-5 w-5" />
+              <Icon className={cn('h-5 w-5 transition-transform', active && 'scale-110')} />
               <span className="truncate">{item.label}</span>
             </a>
           );
@@ -72,7 +72,7 @@ export function BottomNav({ currentPath }: { currentPath: string }) {
           type="button"
           onClick={() => setMoreOpen((v) => !v)}
           className={cn(
-            'flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-lg p-2 text-[10px] font-medium',
+            'flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-lg p-2 text-[10px] font-medium transition-colors',
             moreOpen || secondaryActive
               ? 'text-[var(--color-primary)]'
               : 'text-[var(--color-muted-foreground)]'

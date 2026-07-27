@@ -231,7 +231,7 @@ export function MoneyMovementForm({ accounts, categories, savings, returnTo = '/
         <Input id="note" name="note" defaultValue={initial?.note || ''} />
       </div>
 
-      <Button type="submit" className="w-full">
+      <Button type="submit" className="brand-gradient w-full font-semibold text-[#163038] hover:opacity-90">
         {isTransfer ? (
           <>
             <ArrowRightLeft className="h-4 w-4" /> Transferir

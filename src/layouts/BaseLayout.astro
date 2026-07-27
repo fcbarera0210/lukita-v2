@@ -1,5 +1,8 @@
 ---
 import '../styles/global.css';
+import { ClientRouter } from 'astro:transitions';
+import { Toaster } from '../components/Toaster';
+import { FormPending } from '../components/FormPending';
 
 interface Props {
   title?: string;
@@ -7,7 +10,6 @@ interface Props {
 }
 
 const { title = 'Lukita', user = null } = Astro.props;
-const themeClass = user?.theme === 'light' ? '' : user?.theme === 'system' ? '' : 'dark';
 ---
 <!doctype html>
 <html lang="es" class={user?.theme === 'light' ? '' : 'dark'}>
@@ -16,7 +18,14 @@ const themeClass = user?.theme === 'light' ? '' : user?.theme === 'system' ? '' 
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#00C6DB" />
     <link rel="icon" type="image/svg+xml" href="/logo-icono.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
     <title>{title}</title>
+    <ClientRouter />
     <script is:inline define:vars={{ theme: user?.theme || 'dark' }}>
       (function () {
         const root = document.documentElement;
@@ -29,7 +38,9 @@ const themeClass = user?.theme === 'light' ? '' : user?.theme === 'system' ? '' 
       })();
     </script>
   </head>
-  <body class="min-h-dvh text-[var(--color-foreground)]">
+  <body class="min-h-dvh text-[var(--color-foreground)] antialiased">
     <slot />
+    <Toaster client:load />
+    <FormPending client:load />
   </body>
 </html>
