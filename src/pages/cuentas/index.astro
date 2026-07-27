@@ -1,0 +1,90 @@
+---
+import AppLayout from '../../layouts/AppLayout.astro';
+import { listAccounts } from '../../lib/data';
+import { ACCOUNT_COLORS, ACCOUNT_TYPES, MAX_ACCOUNTS, getAvailableColors } from '../../lib/account-colors';
+import { formatCLP } from '../../lib/clp';
+
+const user = Astro.locals.user!;
+const error = Astro.url.searchParams.get('error');
+let accounts: Awaited<ReturnType<typeof listAccounts>> = [];
+try {
+  accounts = await listAccounts(user.id);
+} catch {}
+const usedColors = accounts.map((a) => a.colorId);
+const available = getAvailableColors(usedColors);
+const canCreate = accounts.length < MAX_ACCOUNTS;
+---
+<AppLayout title="Cuentas · Lukita">
+  <div class="mb-4 flex items-center justify-between">
+    <div>
+      <h1 class="text-xl font-semibold">Cuentas</h1>
+      <p class="text-sm text-[var(--color-muted-foreground)]">{accounts.length}/{MAX_ACCOUNTS}</p>
+    </div>
+  </div>
+  {error && <p class="mb-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{error}</p>}
+
+  <div class="mb-6 space-y-2">
+    {accounts.map((a) => {
+      const color = ACCOUNT_COLORS.find((c) => c.id === a.colorId);
+      return (
+        <div class={`rounded-xl border-2 bg-[var(--color-card)] p-4 ${color?.class || 'border-[var(--color-border)]'}`}>
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <p class="font-medium">{a.name}</p>
+              <p class="text-xs text-[var(--color-muted-foreground)]">{ACCOUNT_TYPES.find((t) => t.id === a.type)?.label || a.type}</p>
+            </div>
+            <p class="text-lg font-semibold">{formatCLP(a.balance)}</p>
+          </div>
+          <details class="mt-3">
+            <summary class="cursor-pointer text-xs text-[var(--color-primary)]">Editar / eliminar</summary>
+            <form method="POST" action="/api/actions" class="mt-3 space-y-2">
+              <input type="hidden" name="intent" value="update_account" />
+              <input type="hidden" name="returnTo" value="/cuentas" />
+              <input type="hidden" name="id" value={a.id} />
+              <input name="name" value={a.name} class="h-9 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm" required />
+              <select name="type" class="h-9 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm">
+                {ACCOUNT_TYPES.map((t) => (
+                  <option value={t.id} selected={t.id === a.type}>{t.label}</option>
+                ))}
+              </select>
+              <input name="initialBalance" value={String(a.initialBalance)} class="h-9 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm" />
+              <select name="colorId" class="h-9 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm">
+                {ACCOUNT_COLORS.filter((c) => c.id === a.colorId || !usedColors.includes(c.id)).map((c) => (
+                  <option value={c.id} selected={c.id === a.colorId}>{c.name}</option>
+                ))}
+              </select>
+              <button type="submit" class="h-9 rounded-lg bg-[var(--color-primary)] px-3 text-sm text-[var(--color-primary-foreground)]">Guardar</button>
+            </form>
+            <form method="POST" action="/api/actions" class="mt-2" onsubmit="return confirm('¿Eliminar cuenta?')">
+              <input type="hidden" name="intent" value="delete_account" />
+              <input type="hidden" name="returnTo" value="/cuentas" />
+              <input type="hidden" name="id" value={a.id} />
+              <button type="submit" class="h-9 rounded-lg border border-red-500 px-3 text-sm text-red-600">Eliminar</button>
+            </form>
+          </details>
+        </div>
+      );
+    })}
+  </div>
+
+  {canCreate ? (
+    <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+      <h2 class="mb-3 text-sm font-semibold">Nueva cuenta</h2>
+      <form method="POST" action="/api/actions" class="space-y-3">
+        <input type="hidden" name="intent" value="create_account" />
+        <input type="hidden" name="returnTo" value="/cuentas" />
+        <input name="name" placeholder="Nombre" required class="h-10 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm" />
+        <select name="type" class="h-10 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm">
+          {ACCOUNT_TYPES.map((t) => <option value={t.id}>{t.label}</option>)}
+        </select>
+        <input name="initialBalance" placeholder="Saldo inicial" value="0" class="h-10 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm" />
+        <select name="colorId" class="h-10 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm">
+          {available.map((c) => <option value={c.id}>{c.name}</option>)}
+        </select>
+        <button type="submit" class="h-10 w-full rounded-lg bg-[var(--color-primary)] text-sm font-medium text-[var(--color-primary-foreground)]">Crear</button>
+      </form>
+    </div>
+  ) : (
+    <p class="text-sm text-[var(--color-muted-foreground)]">Alcanzaste el máximo de {MAX_ACCOUNTS} cuentas.</p>
+  )}
+</AppLayout>

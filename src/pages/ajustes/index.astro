@@ -1,0 +1,57 @@
+---
+import AppLayout from '../../layouts/AppLayout.astro';
+
+const user = Astro.locals.user!;
+const error = Astro.url.searchParams.get('error');
+const ok = Astro.url.searchParams.get('ok');
+---
+<AppLayout title="Ajustes · Lukita">
+  <h1 class="mb-4 text-xl font-semibold">Ajustes</h1>
+  {error && <p class="mb-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{error}</p>}
+  {ok && <p class="mb-3 rounded-lg bg-green-500/10 px-3 py-2 text-sm text-green-600">Guardado</p>}
+
+  <div class="mb-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+    <h2 class="mb-3 text-sm font-semibold">Preferencias</h2>
+    <form method="POST" action="/api/actions" class="space-y-3">
+      <input type="hidden" name="intent" value="update_settings" />
+      <input type="hidden" name="returnTo" value="/ajustes?ok=1" />
+      <div>
+        <label class="mb-1 block text-sm" for="theme">Tema</label>
+        <select id="theme" name="theme" class="h-10 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm">
+          <option value="dark" selected={user.theme === 'dark'}>Oscuro</option>
+          <option value="light" selected={user.theme === 'light'}>Claro</option>
+          <option value="system" selected={user.theme === 'system'}>Sistema</option>
+        </select>
+      </div>
+      <div>
+        <label class="mb-1 block text-sm" for="monthCutoffDay">Día de corte del mes (1–28)</label>
+        <input id="monthCutoffDay" name="monthCutoffDay" type="number" min="1" max="28" value={user.monthCutoffDay} class="h-10 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm" />
+        <p class="mt-1 text-xs text-[var(--color-muted-foreground)]">Define el periodo contable del dashboard e ingresos/gastos.</p>
+      </div>
+      <div>
+        <label class="mb-1 block text-sm" for="dashboardRecentCount">Movimientos recientes en inicio</label>
+        <select id="dashboardRecentCount" name="dashboardRecentCount" class="h-10 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm">
+          <option value="5" selected={user.dashboardRecentCount === 5}>5</option>
+          <option value="10" selected={user.dashboardRecentCount === 10}>10</option>
+        </select>
+      </div>
+      <button type="submit" class="h-10 w-full rounded-lg bg-[var(--color-primary)] text-sm font-medium text-[var(--color-primary-foreground)]">Guardar</button>
+    </form>
+  </div>
+
+  <div class="mb-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+    <h2 class="mb-3 text-sm font-semibold">Cambiar contraseña</h2>
+    <form method="POST" action="/api/actions" class="space-y-3">
+      <input type="hidden" name="intent" value="change_password" />
+      <input type="hidden" name="returnTo" value="/ajustes?ok=1" />
+      <input type="password" name="currentPassword" placeholder="Contraseña actual" required minlength="6" class="h-10 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm" />
+      <input type="password" name="newPassword" placeholder="Nueva contraseña" required minlength="6" class="h-10 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm" />
+      <button type="submit" class="h-10 w-full rounded-lg border border-[var(--color-border)] text-sm font-medium">Actualizar contraseña</button>
+    </form>
+  </div>
+
+  <form method="POST" action="/api/auth">
+    <input type="hidden" name="intent" value="logout" />
+    <button type="submit" class="h-10 w-full rounded-lg border border-red-500 text-sm font-medium text-red-600">Cerrar sesión</button>
+  </form>
+</AppLayout>

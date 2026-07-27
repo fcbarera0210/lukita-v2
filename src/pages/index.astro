@@ -1,0 +1,119 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+import { formatCLP } from '../lib/clp';
+import { formatDate, formatPeriodLabel, getPeriodFromCutoff, shiftPeriod } from '../lib/dates';
+import { listAccounts, listSavings, listTransactions, periodSummary } from '../lib/data';
+
+const user = Astro.locals.user!;
+const pivotParam = Astro.url.searchParams.get('p');
+const pivot = pivotParam ? new Date(pivotParam) : new Date();
+const [periodStart, periodEnd] = getPeriodFromCutoff(pivot, user.monthCutoffDay);
+const prevPivot = shiftPeriod(pivot, user.monthCutoffDay, -1);
+const nextPivot = shiftPeriod(pivot, user.monthCutoffDay, 1);
+
+let accounts: Awaited<ReturnType<typeof listAccounts>> = [];
+let savingsList: Awaited<ReturnType<typeof listSavings>> = [];
+let summary = { income: 0, expense: 0, transactions: [] as Awaited<ReturnType<typeof listTransactions>> };
+let recent: Awaited<ReturnType<typeof listTransactions>> = [];
+let loadError = '';
+
+try {
+  accounts = await listAccounts(user.id);
+  savingsList = await listSavings(user.id);
+  summary = await periodSummary(user.id, periodStart, periodEnd);
+  recent = await listTransactions(user.id, { limit: user.dashboardRecentCount });
+} catch (e) {
+  loadError = e instanceof Error ? e.message : 'Error al cargar datos';
+}
+
+const totalBalance = accounts.reduce((s, a) => s + a.balance, 0);
+const fromIso = periodStart.toISOString();
+const toIso = periodEnd.toISOString();
+---
+<AppLayout title="Inicio · Lukita">
+  {loadError && (
+    <p class="mb-4 rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+      {loadError}. Configura DATABASE_URL y ejecuta npm run db:push.
+    </p>
+  )}
+
+  <section class="mb-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+    <p class="text-sm text-[var(--color-muted-foreground)]">Balance actual</p>
+    <p class="mt-1 text-3xl font-semibold tracking-tight">{formatCLP(totalBalance)}</p>
+  </section>
+
+  <section class="mb-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+    <div class="mb-3 flex items-center justify-between gap-2">
+      <a href={`/?p=${prevPivot.toISOString()}`} class="rounded-lg p-2 hover:bg-[var(--color-muted)]" aria-label="Periodo anterior">‹</a>
+      <div class="text-center">
+        <p class="text-sm font-medium">Periodo</p>
+        <p class="text-xs text-[var(--color-muted-foreground)]">{formatPeriodLabel(periodStart, periodEnd)}</p>
+      </div>
+      <a href={`/?p=${nextPivot.toISOString()}`} class="rounded-lg p-2 hover:bg-[var(--color-muted)]" aria-label="Periodo siguiente">›</a>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div class="rounded-lg bg-[var(--color-muted)]/60 p-3">
+        <p class="text-xs text-[var(--color-muted-foreground)]">Ingresos</p>
+        <p class="mt-1 font-semibold text-green-600 dark:text-green-400">{formatCLP(summary.income)}</p>
+      </div>
+      <div class="rounded-lg bg-[var(--color-muted)]/60 p-3">
+        <p class="text-xs text-[var(--color-muted-foreground)]">Gastos</p>
+        <p class="mt-1 font-semibold text-red-600 dark:text-red-400">{formatCLP(summary.expense)}</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="mb-4">
+    <div class="mb-2 flex items-center justify-between">
+      <h2 class="text-sm font-semibold">Últimos movimientos</h2>
+      <a
+        href={`/movimientos?from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}`}
+        class="text-xs font-medium text-[var(--color-primary)]"
+      >
+        Ver más
+      </a>
+    </div>
+    <div class="space-y-2">
+      {recent.length === 0 ? (
+        <p class="rounded-xl border border-dashed border-[var(--color-border)] p-4 text-sm text-[var(--color-muted-foreground)]">
+          Sin movimientos aún. <a href="/movimientos" class="text-[var(--color-primary)]">Crear uno</a>
+        </p>
+      ) : (
+        recent.map((t) => (
+          <div class="flex items-center justify-between rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2.5">
+            <div>
+              <p class="text-sm font-medium">{t.note || t.type}</p>
+              <p class="text-xs text-[var(--color-muted-foreground)]">{formatDate(new Date(t.date))}</p>
+            </div>
+            <p class={`text-sm font-semibold ${t.type === 'ingreso' ? 'text-green-600' : 'text-red-600'}`}>
+              {formatCLP(t.amount)}
+            </p>
+          </div>
+        ))
+      )}
+    </div>
+  </section>
+
+  <section>
+    <div class="mb-2 flex items-center justify-between">
+      <h2 class="text-sm font-semibold">Ahorros</h2>
+      <a href="/ahorros" class="text-xs font-medium text-[var(--color-primary)]">Ver ahorros</a>
+    </div>
+    <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3">
+      {savingsList.length === 0 ? (
+        <p class="text-sm text-[var(--color-muted-foreground)]">
+          Aún no tienes ahorros. <a href="/ahorros" class="text-[var(--color-primary)]">Crear</a>
+        </p>
+      ) : (
+        <ul class="space-y-2">
+          {savingsList.map((s) => (
+            <li class="flex items-center justify-between text-sm">
+              <span>{s.name}</span>
+              <span class="font-semibold">{formatCLP(s.total)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  </section>
+</AppLayout>

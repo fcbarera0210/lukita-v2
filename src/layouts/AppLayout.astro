@@ -1,0 +1,28 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import { BottomNav } from '../components/BottomNav';
+
+interface Props {
+  title?: string;
+}
+
+const { title = 'Lukita' } = Astro.props;
+const user = Astro.locals.user;
+const path = Astro.url.pathname;
+---
+<BaseLayout title={title} user={user}>
+  <div class="mx-auto min-h-dvh max-w-lg pb-24">
+    <header class="sticky top-0 z-30 border-b border-[var(--color-border)] bg-[color-mix(in_oklab,var(--color-background)_88%,transparent)] px-4 py-3 backdrop-blur">
+      <div class="flex items-center gap-3">
+        <img src="/logo-lukita.svg" alt="Lukita" class="h-7" />
+        <div class="min-w-0 flex-1">
+          <p class="truncate text-sm text-[var(--color-muted-foreground)]">{user?.email}</p>
+        </div>
+      </div>
+    </header>
+    <main class="px-4 py-4">
+      <slot />
+    </main>
+  </div>
+  <BottomNav client:load currentPath={path} />
+</BaseLayout>

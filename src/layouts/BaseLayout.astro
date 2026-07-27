@@ -1,0 +1,35 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title?: string;
+  user?: { email: string; theme: string } | null;
+}
+
+const { title = 'Lukita', user = null } = Astro.props;
+const themeClass = user?.theme === 'light' ? '' : user?.theme === 'system' ? '' : 'dark';
+---
+<!doctype html>
+<html lang="es" class={user?.theme === 'light' ? '' : 'dark'}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#00C6DB" />
+    <link rel="icon" type="image/svg+xml" href="/logo-icono.svg" />
+    <title>{title}</title>
+    <script is:inline define:vars={{ theme: user?.theme || 'dark' }}>
+      (function () {
+        const root = document.documentElement;
+        if (theme === 'system') {
+          const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          root.classList.toggle('dark', dark);
+        } else {
+          root.classList.toggle('dark', theme !== 'light');
+        }
+      })();
+    </script>
+  </head>
+  <body class="min-h-dvh text-[var(--color-foreground)]">
+    <slot />
+  </body>
+</html>

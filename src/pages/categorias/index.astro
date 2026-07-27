@@ -1,0 +1,62 @@
+---
+import AppLayout from '../../layouts/AppLayout.astro';
+import { listCategories } from '../../lib/data';
+
+const ICONS = ['Tag', 'ShoppingCart', 'Home', 'Car', 'Utensils', 'Heart', 'Briefcase', 'Gift', 'Zap', 'Coffee'];
+const user = Astro.locals.user!;
+const error = Astro.url.searchParams.get('error');
+let categories: Awaited<ReturnType<typeof listCategories>> = [];
+try {
+  categories = await listCategories(user.id);
+} catch {}
+---
+<AppLayout title="Categorías · Lukita">
+  <h1 class="mb-1 text-xl font-semibold">Categorías</h1>
+  <p class="mb-4 text-sm text-[var(--color-muted-foreground)]">Universales para ingresos y gastos</p>
+  {error && <p class="mb-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{error}</p>}
+
+  <div class="mb-6 space-y-2">
+    {categories.map((c) => (
+      <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="font-medium">{c.name}</p>
+            <p class="text-xs text-[var(--color-muted-foreground)]">{c.icon}</p>
+          </div>
+        </div>
+        <details class="mt-2">
+          <summary class="cursor-pointer text-xs text-[var(--color-primary)]">Editar / eliminar</summary>
+          <form method="POST" action="/api/actions" class="mt-3 space-y-2">
+            <input type="hidden" name="intent" value="update_category" />
+            <input type="hidden" name="returnTo" value="/categorias" />
+            <input type="hidden" name="id" value={c.id} />
+            <input name="name" value={c.name} required class="h-9 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm" />
+            <select name="icon" class="h-9 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-sm">
+              {ICONS.map((i) => <option value={i} selected={i === c.icon}>{i}</option>)}
+            </select>
+            <button type="submit" class="h-9 rounded-lg bg-[var(--color-primary)] px-3 text-sm text-[var(--color-primary-foreground)]">Guardar</button>
+          </form>
+          <form method="POST" action="/api/actions" class="mt-2" onsubmit="return confirm('¿Eliminar?')">
+            <input type="hidden" name="intent" value="delete_category" />
+            <input type="hidden" name="returnTo" value="/categorias" />
+            <input type="hidden" name="id" value={c.id} />
+            <button type="submit" class="h-9 rounded-lg border border-red-500 px-3 text-sm text-red-600">Eliminar</button>
+          </form>
+        </details>
+      </div>
+    ))}
+  </div>
+
+  <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+    <h2 class="mb-3 text-sm font-semibold">Nueva categoría</h2>
+    <form method="POST" action="/api/actions" class="space-y-3">
+      <input type="hidden" name="intent" value="create_category" />
+      <input type="hidden" name="returnTo" value="/categorias" />
+      <input name="name" placeholder="Nombre" required class="h-10 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm" />
+      <select name="icon" class="h-10 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm">
+        {ICONS.map((i) => <option value={i}>{i}</option>)}
+      </select>
+      <button type="submit" class="h-10 w-full rounded-lg bg-[var(--color-primary)] text-sm font-medium text-[var(--color-primary-foreground)]">Crear</button>
+    </form>
+  </div>
+</AppLayout>
