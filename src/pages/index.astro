@@ -1,8 +1,10 @@
 ---
 import AppLayout from '../layouts/AppLayout.astro';
+import { BalanceToggle } from '../components/BalanceToggle';
 import { formatCLP } from '../lib/clp';
 import { formatDate, formatPeriodLabel, getPeriodFromCutoff, shiftPeriod } from '../lib/dates';
 import { listAccounts, listSavings, listTransactions, periodSummary } from '../lib/data';
+import { calculateGastable, sumBalances } from '../lib/balances';
 
 const user = Astro.locals.user!;
 const pivotParam = Astro.url.searchParams.get('p');
@@ -26,7 +28,9 @@ try {
   loadError = e instanceof Error ? e.message : 'Error al cargar datos';
 }
 
-const totalBalance = accounts.reduce((s, a) => s + a.balance, 0);
+const accountsTotal = sumBalances(accounts.map((a) => a.balance));
+const savingsTotal = sumBalances(savingsList.map((s) => s.total));
+const gastable = calculateGastable(accountsTotal, savingsTotal);
 const fromIso = periodStart.toISOString();
 const toIso = periodEnd.toISOString();
 ---
@@ -47,11 +51,13 @@ const toIso = periodEnd.toISOString();
 
   <div class="grid gap-4 lg:grid-cols-12">
     <section class="animate-fade-up surface rounded-2xl p-5 lg:col-span-5">
-      <p class="text-sm text-[var(--color-muted-foreground)]">Balance actual</p>
-      <p class="font-display mt-2 text-4xl font-bold tracking-tight">{formatCLP(totalBalance)}</p>
-      <p class="mt-2 text-xs text-[var(--color-muted-foreground)]">
-        Suma de {accounts.length} cuenta{accounts.length === 1 ? '' : 's'}
-      </p>
+      <BalanceToggle
+        client:load
+        accountsTotal={accountsTotal}
+        gastable={gastable}
+        accountsCount={accounts.length}
+        size="lg"
+      />
     </section>
 
     <section class="animate-fade-up-delay-1 surface rounded-2xl p-5 lg:col-span-7">

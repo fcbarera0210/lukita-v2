@@ -64,14 +64,14 @@ export const POST: APIRoute = async ({ request, locals, redirect }) => {
       case 'create_category': {
         await createCategory(user.id, {
           name: String(form.get('name') || ''),
-          icon: String(form.get('icon') || 'Tag'),
+          icon: String(form.get('icon') || ''),
         });
         break;
       }
       case 'update_category': {
         await updateCategory(user.id, String(form.get('id')), {
           name: String(form.get('name') || ''),
-          icon: String(form.get('icon') || 'Tag'),
+          icon: String(form.get('icon') || ''),
         });
         break;
       }

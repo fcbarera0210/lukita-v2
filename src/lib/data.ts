@@ -9,12 +9,31 @@ import {
   users,
   type Category,
 } from '../db/schema';
-import { calculateAccountBalance, calculateSavingTotal } from './balances';
+import {
+  applyPoolDelta,
+  assertGastableNonNegative,
+  calculateAccountBalance,
+  calculateSavingTotal,
+  effectOfTransaction,
+  makeBalancePool,
+  sumBalances,
+  type BalancePool,
+} from './balances';
 import { MAX_ACCOUNTS, getNextAvailableColor } from './account-colors';
 import { hashPassword } from './auth';
+import { DEFAULT_CATEGORY_EMOJI, normalizeCategoryEmoji } from './category-emoji';
 import bcrypt from 'bcryptjs';
 
 const TRANSFER_CATEGORY_NAME = 'transferencia entre cuentas';
+
+export async function getBalancePool(userId: string): Promise<BalancePool> {
+  const accs = await listAccounts(userId);
+  const savs = await listSavings(userId);
+  return makeBalancePool(
+    sumBalances(accs.map((a) => a.balance)),
+    sumBalances(savs.map((s) => s.total))
+  );
+}
 
 export async function listAccounts(userId: string) {
   const db = getDb();
@@ -56,6 +75,14 @@ export async function updateAccount(
   data: Partial<{ name: string; type: string; initialBalance: number; colorId: string }>
 ) {
   const db = getDb();
+  if (data.initialBalance !== undefined) {
+    const accs = await listAccounts(userId);
+    const current = accs.find((a) => a.id === id);
+    if (!current) throw new Error('Cuenta no encontrada');
+    const pool = await getBalancePool(userId);
+    const delta = data.initialBalance - current.initialBalance;
+    assertGastableNonNegative(applyPoolDelta(pool, { accountsDelta: delta, savingsDelta: 0 }));
+  }
   const [row] = await db
     .update(accounts)
     .set(data)
@@ -90,7 +117,11 @@ export async function createCategory(userId: string, data: { name: string; icon?
   const db = getDb();
   const [row] = await db
     .insert(categories)
-    .values({ userId, name: data.name.trim(), icon: data.icon || 'Tag' })
+    .values({
+      userId,
+      name: data.name.trim(),
+      icon: normalizeCategoryEmoji(data.icon || DEFAULT_CATEGORY_EMOJI),
+    })
     .returning();
   return row;
 }
@@ -101,9 +132,13 @@ export async function updateCategory(
   data: Partial<{ name: string; icon: string }>
 ) {
   const db = getDb();
+  const patch = {
+    ...data,
+    ...(data.icon !== undefined ? { icon: normalizeCategoryEmoji(data.icon) } : {}),
+  };
   const [row] = await db
     .update(categories)
-    .set(data)
+    .set(patch)
     .where(and(eq(categories.id, id), eq(categories.userId, userId), eq(categories.isSystem, false)))
     .returning();
   return row;
@@ -141,7 +176,7 @@ async function getOrCreateTransferCategory(userId: string): Promise<Category> {
     .values({
       userId,
       name: TRANSFER_CATEGORY_NAME,
-      icon: 'ArrowRightLeft',
+      icon: '↔️',
       isSystem: true,
     })
     .returning();
@@ -164,6 +199,10 @@ export async function createSaving(
   userId: string,
   data: { name: string; categoryId: string; baseAmount: number }
 ) {
+  const baseAmount = Math.max(0, data.baseAmount);
+  const pool = await getBalancePool(userId);
+  assertGastableNonNegative(applyPoolDelta(pool, { accountsDelta: 0, savingsDelta: baseAmount }));
+
   const db = getDb();
   const name = data.name.trim();
   const nameNormalized = name.toLowerCase();
@@ -174,7 +213,7 @@ export async function createSaving(
       name,
       nameNormalized,
       categoryId: data.categoryId,
-      baseAmount: Math.max(0, data.baseAmount),
+      baseAmount,
     })
     .returning();
   return row;
@@ -186,6 +225,15 @@ export async function updateSaving(
   data: Partial<{ name: string; categoryId: string; baseAmount: number }>
 ) {
   const db = getDb();
+  if (data.baseAmount !== undefined) {
+    const savs = await listSavings(userId);
+    const current = savs.find((s) => s.id === id);
+    if (!current) throw new Error('Ahorro no encontrado');
+    const nextBase = Math.max(0, data.baseAmount);
+    const delta = nextBase - current.baseAmount;
+    const pool = await getBalancePool(userId);
+    assertGastableNonNegative(applyPoolDelta(pool, { accountsDelta: 0, savingsDelta: delta }));
+  }
   const patch: Record<string, unknown> = { ...data };
   if (data.name) {
     patch.name = data.name.trim();
@@ -252,6 +300,27 @@ export async function createTransaction(
   }
 ) {
   if (data.amount < 1) throw new Error('El monto debe ser mayor a 0');
+
+  if (data.type === 'gasto' && data.savingsId) {
+    const savs = await listSavings(userId);
+    const saving = savs.find((s) => s.id === data.savingsId);
+    if (!saving) throw new Error('Ahorro no encontrado');
+    if (saving.total < data.amount) {
+      throw new Error(`Saldo insuficiente en el ahorro ${saving.name}`);
+    }
+  }
+
+  const pool = await getBalancePool(userId);
+  const next = applyPoolDelta(
+    pool,
+    effectOfTransaction({
+      type: data.type,
+      amount: data.amount,
+      savingsId: data.savingsId || null,
+    })
+  );
+  assertGastableNonNegative(next);
+
   const db = getDb();
   const [row] = await db
     .insert(transactions)
@@ -283,6 +352,41 @@ export async function updateTransaction(
   }>
 ) {
   const db = getDb();
+  const [existing] = await db
+    .select()
+    .from(transactions)
+    .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
+    .limit(1);
+  if (!existing) throw new Error('Movimiento no encontrado');
+
+  const nextTx = {
+    type: (data.type ?? existing.type) as 'ingreso' | 'gasto',
+    amount: data.amount ?? existing.amount,
+    savingsId: data.savingsId !== undefined ? data.savingsId : existing.savingsId,
+  };
+  if (nextTx.amount < 1) throw new Error('El monto debe ser mayor a 0');
+
+  if (nextTx.type === 'gasto' && nextTx.savingsId) {
+    const savs = await listSavings(userId);
+    const saving = savs.find((s) => s.id === nextTx.savingsId);
+    if (!saving) throw new Error('Ahorro no encontrado');
+    const available =
+      saving.id === existing.savingsId && existing.type === 'gasto'
+        ? saving.total + existing.amount
+        : saving.total;
+    if (available < nextTx.amount) {
+      throw new Error(`Saldo insuficiente en el ahorro ${saving.name}`);
+    }
+  }
+
+  const pool = await getBalancePool(userId);
+  const withoutOld = applyPoolDelta(pool, {
+    accountsDelta: -effectOfTransaction(existing).accountsDelta,
+    savingsDelta: -effectOfTransaction(existing).savingsDelta,
+  });
+  const withNew = applyPoolDelta(withoutOld, effectOfTransaction(nextTx));
+  assertGastableNonNegative(withNew);
+
   const [row] = await db
     .update(transactions)
     .set(data)
@@ -293,6 +397,20 @@ export async function updateTransaction(
 
 export async function deleteTransaction(userId: string, id: string) {
   const db = getDb();
+  const [existing] = await db
+    .select()
+    .from(transactions)
+    .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
+    .limit(1);
+  if (!existing) throw new Error('Movimiento no encontrado');
+
+  const pool = await getBalancePool(userId);
+  const next = applyPoolDelta(pool, {
+    accountsDelta: -effectOfTransaction(existing).accountsDelta,
+    savingsDelta: -effectOfTransaction(existing).savingsDelta,
+  });
+  assertGastableNonNegative(next);
+
   await db.delete(transactions).where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
 }
 
