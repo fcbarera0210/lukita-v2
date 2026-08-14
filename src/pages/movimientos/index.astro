@@ -13,7 +13,9 @@ const note = Astro.url.searchParams.get('note') || '';
 const fromParam = Astro.url.searchParams.get('from');
 const toParam = Astro.url.searchParams.get('to');
 const editId = Astro.url.searchParams.get('edit');
-const showForm = Astro.url.searchParams.get('new') === '1' || Boolean(editId);
+const formError = Astro.url.searchParams.get('error') || '';
+const showForm =
+  Astro.url.searchParams.get('new') === '1' || Boolean(editId) || Boolean(formError);
 
 const from = fromParam ? new Date(fromParam) : undefined;
 const to = toParam ? new Date(toParam) : undefined;
@@ -39,9 +41,13 @@ try {
 } catch {}
 
 const editing = editId ? txs.find((t) => t.id === editId) : undefined;
-const formAccounts = accounts.map((a) => ({ id: a.id, name: a.name }));
+const formAccounts = accounts.map((a) => ({ id: a.id, name: a.name, type: a.type }));
 const formCategories = categories.map((c) => ({ id: c.id, name: c.name }));
-const formSavings = savings.map((s) => ({ id: s.id, name: s.name, categoryId: s.categoryId }));
+const formSavings = savings.map((s) => ({
+  id: s.id,
+  name: s.name,
+  accountId: s.accountId,
+}));
 const formInitial = editing
   ? {
       id: editing.id,
@@ -53,10 +59,15 @@ const formInitial = editing
       note: editing.note || '',
       savingsId: editing.savingsId,
     }
-  : undefined;
+  : accountId
+    ? { accountId }
+    : undefined;
 
 const closeHref = '/movimientos';
 const formTitle = editing ? 'Editar movimiento' : 'Nuevo movimiento';
+const formReturnTo = editing
+  ? `/movimientos?edit=${editing.id}`
+  : `/movimientos?new=1${accountId ? `&accountId=${encodeURIComponent(accountId)}` : ''}`;
 ---
 <AppLayout title="Movimientos · Lukita" pageTitle="Movimientos" pageDescription="Historial y filtros">
   <a
@@ -95,7 +106,8 @@ const formTitle = editing ? 'Editar movimiento' : 'Nuevo movimiento';
         accounts={formAccounts}
         categories={formCategories}
         savings={formSavings}
-        returnTo="/movimientos"
+        returnTo={formReturnTo}
+        errorMessage={formError || undefined}
         initial={formInitial}
       />
     </div>
@@ -111,7 +123,8 @@ const formTitle = editing ? 'Editar movimiento' : 'Nuevo movimiento';
       accounts={formAccounts}
       categories={formCategories}
       savings={formSavings}
-      returnTo="/movimientos"
+      returnTo={formReturnTo}
+      errorMessage={formError || undefined}
       initial={formInitial}
     />
   </div>

@@ -15,12 +15,19 @@ export const MAX_ACCOUNTS = 8;
 export const MIN_ACCOUNTS_FOR_TRANSFER = 2;
 
 export const ACCOUNT_TYPES = [
-  { id: 'efectivo', label: 'Efectivo' },
-  { id: 'cuenta_corriente', label: 'Cuenta corriente' },
-  { id: 'tarjeta', label: 'Tarjeta' },
-  { id: 'ahorro', label: 'Ahorro' },
-  { id: 'otro', label: 'Otro' },
+  { id: 'corriente', label: 'Cuenta corriente' },
+  { id: 'credito', label: 'Crédito' },
 ] as const;
+
+export type AccountTypeId = (typeof ACCOUNT_TYPES)[number]['id'];
+
+export function isCreditAccount(type: string): boolean {
+  return type === 'credito';
+}
+
+export function isCheckingAccount(type: string): boolean {
+  return type === 'corriente';
+}
 
 export function getColorById(id: string) {
   return ACCOUNT_COLORS.find((c) => c.id === id);

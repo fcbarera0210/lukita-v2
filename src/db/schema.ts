@@ -43,8 +43,10 @@ export const accounts = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
-    type: text('type').notNull(), // efectivo | cuenta_corriente | tarjeta | ahorro | otro
-    initialBalance: integer('initial_balance').notNull().default(0),
+    type: text('type').notNull(), // corriente | credito
+    initialBalance: integer('initial_balance').notNull().default(0), // saldo (corriente) o gastado inicial (credito)
+    creditLimit: integer('credit_limit'), // cupo; solo credito
+    isFavorite: boolean('is_favorite').notNull().default(false),
     colorId: text('color_id').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -76,17 +78,18 @@ export const savings = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'restrict' }),
     name: text('name').notNull(),
     nameNormalized: text('name_normalized').notNull(),
-    categoryId: uuid('category_id')
-      .notNull()
-      .references(() => categories.id, { onDelete: 'restrict' }),
     baseAmount: integer('base_amount').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex('savings_user_name_uidx').on(t.userId, t.nameNormalized),
+    uniqueIndex('savings_user_account_name_uidx').on(t.userId, t.accountId, t.nameNormalized),
     index('savings_user_idx').on(t.userId),
+    index('savings_account_idx').on(t.accountId),
   ]
 );
 
@@ -109,6 +112,7 @@ export const transactions = pgTable(
     note: text('note'),
     savingsId: uuid('savings_id').references(() => savings.id, { onDelete: 'set null' }),
     transferId: uuid('transfer_id'),
+    installmentPlanId: uuid('installment_plan_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -138,6 +142,59 @@ export const transfers = pgTable(
   (t) => [index('transfers_user_idx').on(t.userId)]
 );
 
+export const installmentPlans = pgTable(
+  'installment_plans',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    creditAccountId: uuid('credit_account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'restrict' }),
+    totalAmount: integer('total_amount').notNull(),
+    installmentCount: integer('installment_count').notNull(),
+    scheduleMode: text('schedule_mode').notNull(), // consecutive | billing_day
+    firstDueDate: timestamp('first_due_date', { withTimezone: true }).notNull(),
+    billingDay: integer('billing_day'),
+    categoryId: uuid('category_id')
+      .notNull()
+      .references(() => categories.id, { onDelete: 'restrict' }),
+    note: text('note'),
+    purchaseTransactionId: uuid('purchase_transaction_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('installment_plans_user_idx').on(t.userId),
+    index('installment_plans_account_idx').on(t.creditAccountId),
+  ]
+);
+
+export const installments = pgTable(
+  'installments',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    planId: uuid('plan_id')
+      .notNull()
+      .references(() => installmentPlans.id, { onDelete: 'cascade' }),
+    sequence: integer('sequence').notNull(),
+    dueDate: timestamp('due_date', { withTimezone: true }).notNull(),
+    plannedAmount: integer('planned_amount').notNull(),
+    status: text('status').notNull().default('pending'), // pending | paid
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+    paymentTransferId: uuid('payment_transfer_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('installments_user_idx').on(t.userId),
+    index('installments_plan_idx').on(t.planId),
+    index('installments_due_idx').on(t.dueDate),
+  ]
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
   accounts: many(accounts),
@@ -145,6 +202,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   savings: many(savings),
   transactions: many(transactions),
   transfers: many(transfers),
+  installmentPlans: many(installmentPlans),
+  installments: many(installments),
 }));
 
 export type User = typeof users.$inferSelect;
@@ -153,3 +212,5 @@ export type Category = typeof categories.$inferSelect;
 export type Saving = typeof savings.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
 export type Transfer = typeof transfers.$inferSelect;
+export type InstallmentPlan = typeof installmentPlans.$inferSelect;
+export type Installment = typeof installments.$inferSelect;

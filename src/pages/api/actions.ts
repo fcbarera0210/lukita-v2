@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import {
   createAccount,
   createCategory,
+  createInstallmentPurchase,
   createSaving,
   createTransaction,
   createTransfer,
@@ -9,6 +10,8 @@ import {
   deleteCategory,
   deleteSaving,
   deleteTransaction,
+  payInstallments,
+  setFavoriteAccount,
   updateAccount,
   updateCategory,
   updateSaving,
@@ -40,21 +43,36 @@ export const POST: APIRoute = async ({ request, locals, redirect }) => {
   try {
     switch (intent) {
       case 'create_account': {
+        const type = String(form.get('type') || 'corriente');
+        const isCredit = type === 'credito';
         await createAccount(user.id, {
           name: String(form.get('name') || ''),
-          type: String(form.get('type') || 'efectivo'),
-          initialBalance: parseCLP(String(form.get('initialBalance') || '0')),
+          type,
+          initialBalance: parseCLP(
+            String(form.get(isCredit ? 'initialSpent' : 'initialBalance') || form.get('initialBalance') || '0')
+          ),
+          creditLimit: isCredit ? parseCLP(String(form.get('creditLimit') || '0')) : null,
           colorId: String(form.get('colorId') || '') || undefined,
+          isFavorite: form.get('isFavorite') === 'on' || form.get('isFavorite') === 'true',
         });
         break;
       }
       case 'update_account': {
+        const type = String(form.get('type') || 'corriente');
+        const isCredit = type === 'credito';
         await updateAccount(user.id, String(form.get('id')), {
           name: String(form.get('name') || ''),
-          type: String(form.get('type') || 'efectivo'),
-          initialBalance: parseCLP(String(form.get('initialBalance') || '0')),
+          type,
+          initialBalance: parseCLP(
+            String(form.get(isCredit ? 'initialSpent' : 'initialBalance') || form.get('initialBalance') || '0')
+          ),
+          creditLimit: isCredit ? parseCLP(String(form.get('creditLimit') || '0')) : null,
           colorId: String(form.get('colorId') || ''),
         });
+        break;
+      }
+      case 'set_favorite_account': {
+        await setFavoriteAccount(user.id, String(form.get('id')));
         break;
       }
       case 'delete_account': {
@@ -82,7 +100,7 @@ export const POST: APIRoute = async ({ request, locals, redirect }) => {
       case 'create_saving': {
         await createSaving(user.id, {
           name: String(form.get('name') || ''),
-          categoryId: String(form.get('categoryId') || ''),
+          accountId: String(form.get('accountId') || ''),
           baseAmount: parseCLP(String(form.get('baseAmount') || '0')),
         });
         break;
@@ -90,7 +108,7 @@ export const POST: APIRoute = async ({ request, locals, redirect }) => {
       case 'update_saving': {
         await updateSaving(user.id, String(form.get('id')), {
           name: String(form.get('name') || ''),
-          categoryId: String(form.get('categoryId') || ''),
+          accountId: String(form.get('accountId') || '') || undefined,
           baseAmount: parseCLP(String(form.get('baseAmount') || '0')),
         });
         break;
@@ -138,6 +156,39 @@ export const POST: APIRoute = async ({ request, locals, redirect }) => {
         });
         break;
       }
+      case 'create_installment_purchase': {
+        const scheduleMode =
+          String(form.get('scheduleMode') || 'consecutive') === 'billing_day'
+            ? 'billing_day'
+            : 'consecutive';
+        await createInstallmentPurchase(user.id, {
+          creditAccountId: String(form.get('creditAccountId') || ''),
+          totalAmount: parseCLP(String(form.get('totalAmount') || '0')),
+          installmentCount: Number(form.get('installmentCount') || 1),
+          firstDueDate: parseFormDate(String(form.get('firstDueDate') || '')),
+          scheduleMode,
+          billingDay: Number(form.get('billingDay') || 0) || undefined,
+          categoryId: String(form.get('categoryId') || ''),
+          note: String(form.get('note') || '') || undefined,
+        });
+        break;
+      }
+      case 'pay_installment':
+      case 'pay_installments_month': {
+        const idsRaw = form.getAll('installmentIds');
+        const single = String(form.get('installmentId') || '');
+        const installmentIds = [
+          ...idsRaw.map((v) => String(v)).filter(Boolean),
+          ...(single ? [single] : []),
+        ];
+        await payInstallments(user.id, {
+          installmentIds,
+          fromAccountId: String(form.get('fromAccountId') || ''),
+          amount: parseCLP(String(form.get('amount') || '0')),
+          note: String(form.get('note') || '') || undefined,
+        });
+        break;
+      }
       case 'update_settings': {
         await updateUserSettings(user.id, {
           monthCutoffDay: Number(form.get('monthCutoffDay') || 1),
@@ -157,13 +208,29 @@ export const POST: APIRoute = async ({ request, locals, redirect }) => {
       default:
         throw new Error('Acción desconocida');
     }
+
+    // Tras crear/editar movimiento, cerrar el formulario (quitar new/edit) pero conservar ok.
+    if (intent === 'create_transaction' || intent === 'update_transaction') {
+      const u = new URL(returnTo, 'http://local');
+      u.searchParams.delete('new');
+      u.searchParams.delete('edit');
+      u.searchParams.delete('error');
+      u.searchParams.set('ok', '1');
+      const qs = u.searchParams.toString();
+      return redirect(qs ? `${u.pathname}?${qs}` : u.pathname);
+    }
+
     const hasFeedback = /[?&](ok|success|error)=/.test(returnTo);
     if (hasFeedback) return redirect(returnTo);
     const sep = returnTo.includes('?') ? '&' : '?';
     return redirect(`${returnTo}${sep}ok=1`);
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Error';
-    const cleaned = returnTo.replace(/([?&])(ok|success)=[^&]*/g, '$1').replace(/[?&]$/, '');
+    const cleaned = returnTo
+      .replace(/([?&])(ok|success)=[^&]*/g, '$1')
+      .replace(/([?&])error=[^&]*/g, '$1')
+      .replace(/[?&]$/, '')
+      .replace(/\?&/, '?');
     const sep = cleaned.includes('?') ? '&' : '?';
     return redirect(`${cleaned}${sep}error=${encodeURIComponent(msg)}`);
   }

@@ -3,9 +3,9 @@
 import { X } from 'lucide-react';
 import { MoneyMovementForm } from './MoneyMovementForm';
 
-type Account = { id: string; name: string };
+type Account = { id: string; name: string; type?: string };
 type Category = { id: string; name: string };
-type Saving = { id: string; name: string; categoryId: string };
+type Saving = { id: string; name: string; accountId?: string };
 
 type Props = {
   open: boolean;
@@ -13,6 +13,7 @@ type Props = {
   categories: Category[];
   savings: Saving[];
   returnTo?: string;
+  errorMessage?: string;
   title: string;
   closeHref: string;
   initial?: {
@@ -32,7 +33,8 @@ export function MovementDrawer({
   accounts,
   categories,
   savings,
-  returnTo = '/movimientos',
+  returnTo = '/movimientos?new=1',
+  errorMessage,
   title,
   closeHref,
   initial,
@@ -59,6 +61,7 @@ export function MovementDrawer({
             categories={categories}
             savings={savings}
             returnTo={returnTo}
+            errorMessage={errorMessage}
             initial={initial}
           />
         </div>

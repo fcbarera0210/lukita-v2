@@ -80,21 +80,29 @@ type AccountProps = {
   balance: number;
   gastable: number;
   className?: string;
+  size?: 'lg' | 'md' | 'sm';
 };
 
 /** Switch compacto para el saldo de una cuenta individual. */
-export function AccountBalanceToggle({ balance, gastable, className }: AccountProps) {
+export function AccountBalanceToggle({ balance, gastable, className, size = 'sm' }: AccountProps) {
   const [mode, setMode] = useState<Mode>('gastable');
   const value = mode === 'gastable' ? gastable : balance;
+  const isLarge = size === 'lg';
 
   return (
-    <div className={cn('text-right', className)}>
-      <div className="mb-1 inline-flex rounded-md bg-[var(--color-muted)]/80 p-0.5 text-[10px] font-semibold">
+    <div className={cn(isLarge ? '' : 'text-right', className)}>
+      <div
+        className={cn(
+          'mb-1 inline-flex rounded-md bg-[var(--color-muted)]/80 p-0.5 font-semibold',
+          isLarge ? 'text-xs' : 'text-[10px]'
+        )}
+      >
         <button
           type="button"
           onClick={() => setMode('gastable')}
           className={cn(
             'rounded px-1.5 py-0.5 transition-colors',
+            isLarge && 'px-2.5 py-1',
             mode === 'gastable' ? 'bg-[var(--color-card)] shadow-sm' : 'text-[var(--color-muted-foreground)]'
           )}
         >
@@ -105,14 +113,22 @@ export function AccountBalanceToggle({ balance, gastable, className }: AccountPr
           onClick={() => setMode('cuentas')}
           className={cn(
             'rounded px-1.5 py-0.5 transition-colors',
+            isLarge && 'px-2.5 py-1',
             mode === 'cuentas' ? 'bg-[var(--color-card)] shadow-sm' : 'text-[var(--color-muted-foreground)]'
           )}
         >
-          En cuentas
+          Saldo
         </button>
       </div>
-      <p className="font-display text-lg font-bold tabular-nums">{formatCLP(value)}</p>
-      <p className="text-[10px] text-[var(--color-muted-foreground)]">
+      <p
+        className={cn(
+          'font-display font-bold tabular-nums',
+          isLarge ? 'mt-2 text-4xl tracking-tight' : 'text-lg'
+        )}
+      >
+        {formatCLP(value)}
+      </p>
+      <p className={cn('text-[var(--color-muted-foreground)]', isLarge ? 'mt-2 text-xs' : 'text-[10px]')}>
         {mode === 'gastable' ? 'Disponible tras ahorros' : 'Saldo de la cuenta'}
       </p>
     </div>
