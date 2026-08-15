@@ -718,6 +718,42 @@ export async function createTransfer(
   return transfer;
 }
 
+export async function payCreditBalance(
+  userId: string,
+  data: {
+    creditAccountId: string;
+    fromAccountId: string;
+    amount: number;
+    note?: string;
+  }
+) {
+  if (data.amount < 1) throw new Error('El monto debe ser mayor a 0');
+
+  const accs = await listAccounts(userId);
+  const from = accs.find((account) => account.id === data.fromAccountId);
+  const credit = accs.find((account) => account.id === data.creditAccountId);
+
+  if (!from || !isCheckingAccount(from.type)) {
+    throw new Error('Debes pagar desde una cuenta corriente');
+  }
+  if (!credit || !isCreditAccount(credit.type)) {
+    throw new Error('Cuenta de crédito no encontrada');
+  }
+  if (credit.debt <= 0) {
+    throw new Error('La cuenta de crédito no tiene deuda pendiente');
+  }
+  if (data.amount > credit.debt) {
+    throw new Error('El abono no puede superar la deuda actual');
+  }
+
+  return createTransfer(userId, {
+    fromAccountId: from.id,
+    toAccountId: credit.id,
+    amount: data.amount,
+    note: data.note || `Abono a ${credit.name}`,
+  });
+}
+
 function buildInstallmentDueDates(
   firstDueDate: Date,
   count: number,

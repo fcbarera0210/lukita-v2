@@ -33,7 +33,7 @@ export function MovementDrawer({
   accounts,
   categories,
   savings,
-  returnTo = '/movimientos?new=1',
+  returnTo = '/movimientos',
   errorMessage,
   title,
   closeHref,

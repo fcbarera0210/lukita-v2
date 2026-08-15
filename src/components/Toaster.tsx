@@ -16,10 +16,11 @@ function readQueryToasts(): ToastItem[] {
   const error = params.get('error');
   const ok = params.get('ok');
   const success = params.get('success');
-  const formOpen = params.get('new') === '1' || params.has('edit');
+  const formOpen =
+    params.get('new') === '1' || params.has('edit') || params.has('action');
   const items: ToastItem[] = [];
 
-  // Errores del formulario de movimiento se muestran en el form, no como toast.
+  // Errores de formularios abiertos se muestran en el form, no como toast.
   if (error && !formOpen) {
     items.push({ id: Date.now(), type: 'error', message: error });
   } else if (ok || success) {

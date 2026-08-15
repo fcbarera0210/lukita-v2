@@ -10,6 +10,7 @@ import {
   deleteCategory,
   deleteSaving,
   deleteTransaction,
+  payCreditBalance,
   payInstallments,
   setFavoriteAccount,
   updateAccount,
@@ -156,6 +157,15 @@ export const POST: APIRoute = async ({ request, locals, redirect }) => {
         });
         break;
       }
+      case 'pay_credit_balance': {
+        await payCreditBalance(user.id, {
+          creditAccountId: String(form.get('creditAccountId') || ''),
+          fromAccountId: String(form.get('fromAccountId') || ''),
+          amount: parseCLP(String(form.get('amount') || '0')),
+          note: String(form.get('note') || '') || undefined,
+        });
+        break;
+      }
       case 'create_installment_purchase': {
         const scheduleMode =
           String(form.get('scheduleMode') || 'consecutive') === 'billing_day'
@@ -214,6 +224,7 @@ export const POST: APIRoute = async ({ request, locals, redirect }) => {
       const u = new URL(returnTo, 'http://local');
       u.searchParams.delete('new');
       u.searchParams.delete('edit');
+      u.searchParams.delete('action');
       u.searchParams.delete('error');
       u.searchParams.set('ok', '1');
       const qs = u.searchParams.toString();

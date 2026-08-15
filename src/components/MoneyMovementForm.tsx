@@ -7,6 +7,7 @@ import { Input } from './ui/Input';
 import { Select } from './ui/Select';
 import { Label } from './ui/Label';
 import { formatCLP, parseCLP } from '../lib/clp';
+import { cn } from '../lib/utils';
 
 type Account = { id: string; name: string; type?: string };
 type Category = { id: string; name: string };
@@ -18,6 +19,10 @@ type Props = {
   savings: Saving[];
   returnTo?: string;
   errorMessage?: string;
+  /** Fija el tipo y oculta el selector gasto/ingreso */
+  lockedType?: 'gasto' | 'ingreso';
+  /** Oculta el selector de cuenta (cuenta ya fijada en initial.accountId) */
+  hideAccountSelect?: boolean;
   initial?: {
     id?: string;
     type?: 'gasto' | 'ingreso';
@@ -34,12 +39,14 @@ export function MoneyMovementForm({
   accounts,
   categories,
   savings,
-  returnTo = '/movimientos?new=1',
+  returnTo = '/movimientos',
   errorMessage,
+  lockedType,
+  hideAccountSelect = false,
   initial,
 }: Props) {
   const [movementType, setMovementType] = useState<'gasto' | 'ingreso'>(
-    initial?.type || 'gasto'
+    lockedType || initial?.type || 'gasto'
   );
   const [amount, setAmount] = useState(initial?.amount || 0);
   const [categoryId, setCategoryId] = useState(initial?.categoryId || '');
@@ -47,6 +54,7 @@ export function MoneyMovementForm({
   const [affectsSaving, setAffectsSaving] = useState(Boolean(initial?.savingsId));
   const [savingsId, setSavingsId] = useState(initial?.savingsId || '');
 
+  const effectiveType = lockedType || movementType;
   const selectedAccount = accounts.find((a) => a.id === accountId);
   const isCredit = selectedAccount?.type === 'credito';
   const canAffectSaving = !isCredit && Boolean(accountId);
@@ -58,13 +66,15 @@ export function MoneyMovementForm({
 
   const isEdit = Boolean(initial?.id);
   const intent = isEdit ? 'update_transaction' : 'create_transaction';
+  const showTypeTabs = !isEdit && !lockedType;
 
   return (
     <form method="POST" action="/api/actions" className="space-y-4">
       <input type="hidden" name="intent" value={intent} />
       <input type="hidden" name="returnTo" value={returnTo} />
       {initial?.id && <input type="hidden" name="id" value={initial.id} />}
-      <input type="hidden" name="type" value={movementType} />
+      <input type="hidden" name="type" value={effectiveType} />
+      {hideAccountSelect && accountId && <input type="hidden" name="accountId" value={accountId} />}
 
       {errorMessage && (
         <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">
@@ -72,23 +82,30 @@ export function MoneyMovementForm({
         </p>
       )}
 
-      {!isEdit && (
+      {showTypeTabs && (
         <div>
-          <Label>Tipo de movimiento</Label>
-          <div className="grid grid-cols-2 gap-1 rounded-lg bg-[var(--color-muted)] p-1">
+          <p className="mb-1.5 text-sm font-medium text-[var(--color-foreground)]">Tipo de movimiento</p>
+          <div className="grid grid-cols-2 gap-1 rounded-lg bg-[var(--color-muted)] p-1" role="tablist">
             {(['gasto', 'ingreso'] as const).map((t) => (
-              <button
+              <label
                 key={t}
-                type="button"
-                onClick={() => setMovementType(t)}
-                className={`rounded-md px-2 py-2 text-sm font-medium capitalize ${
+                className={cn(
+                  'relative cursor-pointer rounded-md px-2 py-2 text-center text-sm font-medium capitalize transition-colors',
                   movementType === t
-                    ? 'bg-[var(--color-card)] shadow-sm'
+                    ? 'bg-[var(--color-card)] text-[var(--color-foreground)] shadow-sm'
                     : 'text-[var(--color-muted-foreground)]'
-                }`}
+                )}
               >
+                <input
+                  type="radio"
+                  name="_movementTypeUi"
+                  value={t}
+                  checked={movementType === t}
+                  onChange={() => setMovementType(t)}
+                  className="absolute h-px w-px overflow-hidden opacity-0"
+                />
                 {t}
-              </button>
+              </label>
             ))}
           </div>
         </div>
@@ -115,28 +132,31 @@ export function MoneyMovementForm({
           required
         />
       </div>
-      <div>
-        <Label htmlFor="accountId">Cuenta</Label>
-        <Select
-          id="accountId"
-          name="accountId"
-          value={accountId}
-          onChange={(e) => {
-            setAccountId(e.target.value);
-            setAffectsSaving(false);
-            setSavingsId('');
-          }}
-          required
-        >
-          <option value="">Seleccionar</option>
-          {accounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-              {a.type === 'credito' ? ' (crédito)' : ''}
-            </option>
-          ))}
-        </Select>
-      </div>
+
+      {!hideAccountSelect && (
+        <div>
+          <Label htmlFor="accountId">Cuenta</Label>
+          <Select
+            id="accountId"
+            name="accountId"
+            value={accountId}
+            onChange={(e) => {
+              setAccountId(e.target.value);
+              setAffectsSaving(false);
+              setSavingsId('');
+            }}
+            required
+          >
+            <option value="">Seleccionar</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+                {a.type === 'credito' ? ' (crédito)' : ''}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
 
       {!affectsSaving && (
         <div>
@@ -192,12 +212,12 @@ export function MoneyMovementForm({
               </Select>
             </div>
           )}
-          {affectsSaving && movementType === 'ingreso' && (
+          {affectsSaving && effectiveType === 'ingreso' && (
             <p className="text-xs text-[var(--color-muted-foreground)]">
               Aparta dinero que ya está en la cuenta; no aumenta el saldo. No requiere categoría.
             </p>
           )}
-          {affectsSaving && movementType === 'gasto' && (
+          {affectsSaving && effectiveType === 'gasto' && (
             <p className="text-xs text-[var(--color-muted-foreground)]">
               Se descuenta del saldo de la cuenta y del ahorro. No requiere categoría.
             </p>
