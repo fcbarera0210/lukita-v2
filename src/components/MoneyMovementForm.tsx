@@ -49,7 +49,10 @@ export function MoneyMovementForm({
     lockedType || initial?.type || 'gasto'
   );
   const [amount, setAmount] = useState(initial?.amount || 0);
-  const [categoryId, setCategoryId] = useState(initial?.categoryId || '');
+  const [categoryId, setCategoryId] = useState(() => {
+    if (!initial?.categoryId) return '';
+    return categories.some((c) => c.id === initial.categoryId) ? initial.categoryId : '';
+  });
   const [accountId, setAccountId] = useState(initial?.accountId || '');
   const [affectsSaving, setAffectsSaving] = useState(Boolean(initial?.savingsId));
   const [savingsId, setSavingsId] = useState(initial?.savingsId || '');
@@ -166,9 +169,8 @@ export function MoneyMovementForm({
             name="categoryId"
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
-            required
           >
-            <option value="">Seleccionar</option>
+            <option value="">otros</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}

@@ -91,10 +91,10 @@ export function InstallmentPurchaseForm({ creditAccountId, categories, returnTo 
         <label className="mb-1 block text-xs font-medium text-[var(--color-muted-foreground)]">Categoría</label>
         <select
           name="categoryId"
-          required
           className="h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-sm"
+          defaultValue=""
         >
-          <option value="">Seleccionar</option>
+          <option value="">otros</option>
           {categories.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}

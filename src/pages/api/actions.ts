@@ -125,7 +125,7 @@ export const POST: APIRoute = async ({ request, locals, redirect }) => {
           amount: parseCLP(String(form.get('amount') || '0')),
           date: parseFormDate(String(form.get('date') || '')),
           accountId: String(form.get('accountId') || ''),
-          categoryId: String(form.get('categoryId') || ''),
+          categoryId: String(form.get('categoryId') || '') || undefined,
           note: String(form.get('note') || '') || undefined,
           savingsId: affects ? String(form.get('savingsId') || '') || undefined : undefined,
         });
@@ -154,6 +154,8 @@ export const POST: APIRoute = async ({ request, locals, redirect }) => {
           toAccountId: String(form.get('toAccountId') || ''),
           amount: parseCLP(String(form.get('amount') || '0')),
           note: String(form.get('note') || '') || undefined,
+          date: parseFormDate(String(form.get('date') || '')),
+          requireCheckingAccounts: true,
         });
         break;
       }
@@ -178,7 +180,7 @@ export const POST: APIRoute = async ({ request, locals, redirect }) => {
           firstDueDate: parseFormDate(String(form.get('firstDueDate') || '')),
           scheduleMode,
           billingDay: Number(form.get('billingDay') || 0) || undefined,
-          categoryId: String(form.get('categoryId') || ''),
+          categoryId: String(form.get('categoryId') || '') || undefined,
           note: String(form.get('note') || '') || undefined,
         });
         break;
@@ -220,7 +222,11 @@ export const POST: APIRoute = async ({ request, locals, redirect }) => {
     }
 
     // Tras crear/editar movimiento, cerrar el formulario (quitar new/edit) pero conservar ok.
-    if (intent === 'create_transaction' || intent === 'update_transaction') {
+    if (
+      intent === 'create_transaction' ||
+      intent === 'update_transaction' ||
+      intent === 'create_transfer'
+    ) {
       const u = new URL(returnTo, 'http://local');
       u.searchParams.delete('new');
       u.searchParams.delete('edit');

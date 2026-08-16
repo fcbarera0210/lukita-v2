@@ -25,13 +25,20 @@ import {
   sumBalances,
   type BalancePool,
 } from './balances';
-import { isCheckingAccount, isCreditAccount, MAX_ACCOUNTS, getNextAvailableColor } from './account-colors';
+import {
+  isCheckingAccount,
+  isCreditAccount,
+  MAX_ACCOUNTS,
+  MIN_ACCOUNTS_FOR_TRANSFER,
+  getNextAvailableColor,
+} from './account-colors';
 import { hashPassword } from './auth';
 import { DEFAULT_CATEGORY_EMOJI, normalizeCategoryEmoji } from './category-emoji';
 import bcrypt from 'bcryptjs';
 
 const TRANSFER_CATEGORY_NAME = 'transferencia entre cuentas';
 const SAVINGS_CATEGORY_NAME = 'ahorro';
+const UNCATEGORIZED_CATEGORY_NAME = 'otros';
 const INSTALLMENT_PURCHASE_NOTE = 'Compra en cuotas';
 
 function asTxEffect(tx: { type: string; amount: number; savingsId?: string | null }) {
@@ -303,44 +310,54 @@ export async function deleteCategory(userId: string, id: string) {
     .where(and(eq(categories.id, id), eq(categories.userId, userId), eq(categories.isSystem, false)));
 }
 
-async function getOrCreateTransferCategory(userId: string): Promise<Category> {
+async function getOrCreateSystemCategory(
+  userId: string,
+  name: string,
+  icon: string
+): Promise<Category> {
   const db = getDb();
   const [existing] = await db
     .select()
     .from(categories)
-    .where(and(eq(categories.userId, userId), eq(categories.name, TRANSFER_CATEGORY_NAME)))
+    .where(and(eq(categories.userId, userId), eq(categories.name, name)))
     .limit(1);
   if (existing) return existing;
   const [created] = await db
     .insert(categories)
     .values({
       userId,
-      name: TRANSFER_CATEGORY_NAME,
-      icon: '↔️',
+      name,
+      icon,
       isSystem: true,
     })
     .returning();
   return created;
 }
 
+async function getOrCreateTransferCategory(userId: string): Promise<Category> {
+  return getOrCreateSystemCategory(userId, TRANSFER_CATEGORY_NAME, '↔️');
+}
+
 async function getOrCreateSavingsCategory(userId: string): Promise<Category> {
-  const db = getDb();
-  const [existing] = await db
-    .select()
-    .from(categories)
-    .where(and(eq(categories.userId, userId), eq(categories.name, SAVINGS_CATEGORY_NAME)))
-    .limit(1);
-  if (existing) return existing;
-  const [created] = await db
-    .insert(categories)
-    .values({
-      userId,
-      name: SAVINGS_CATEGORY_NAME,
-      icon: '🐷',
-      isSystem: true,
-    })
-    .returning();
-  return created;
+  return getOrCreateSystemCategory(userId, SAVINGS_CATEGORY_NAME, '🐷');
+}
+
+async function getOrCreateUncategorizedCategory(userId: string): Promise<Category> {
+  return getOrCreateSystemCategory(userId, UNCATEGORIZED_CATEGORY_NAME, '📦');
+}
+
+async function resolveCategoryId(
+  userId: string,
+  categoryId: string | undefined | null,
+  savingsId?: string | null
+): Promise<string> {
+  if (savingsId) {
+    const savingsCategory = await getOrCreateSavingsCategory(userId);
+    return savingsCategory.id;
+  }
+  if (categoryId) return categoryId;
+  const uncategorized = await getOrCreateUncategorizedCategory(userId);
+  return uncategorized.id;
 }
 
 export async function listSavings(userId: string, opts?: { accountId?: string }) {
@@ -476,7 +493,7 @@ export async function createTransaction(
     amount: number;
     date: Date;
     accountId: string;
-    categoryId: string;
+    categoryId?: string;
     note?: string;
     savingsId?: string;
   }
@@ -500,8 +517,7 @@ export async function createTransaction(
     }
   }
 
-  const savingsCategory = data.savingsId ? await getOrCreateSavingsCategory(userId) : null;
-  const categoryId = data.savingsId ? savingsCategory!.id : data.categoryId;
+  const categoryId = await resolveCategoryId(userId, data.categoryId, data.savingsId);
 
   if (isCreditAccount(acc.type)) {
     if (data.savingsId) throw new Error('Los ahorros solo aplican a cuentas corrientes');
@@ -561,6 +577,9 @@ export async function updateTransaction(
     .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
     .limit(1);
   if (!existing) throw new Error('Movimiento no encontrado');
+  if (existing.transferId) {
+    throw new Error('Las transferencias no se pueden editar; elimínalas y créalas de nuevo');
+  }
 
   const nextTx = {
     type: (data.type ?? existing.type) as 'ingreso' | 'gasto',
@@ -621,9 +640,12 @@ export async function updateTransaction(
   }
 
   const patch: typeof data = { ...data };
-  if (nextTx.savingsId) {
-    const savingsCategory = await getOrCreateSavingsCategory(userId);
-    patch.categoryId = savingsCategory.id;
+  if (data.categoryId !== undefined || data.savingsId !== undefined || nextTx.savingsId) {
+    patch.categoryId = await resolveCategoryId(
+      userId,
+      data.categoryId !== undefined ? data.categoryId || null : existing.categoryId,
+      nextTx.savingsId
+    );
   }
 
   const [row] = await db
@@ -643,15 +665,38 @@ export async function deleteTransaction(userId: string, id: string) {
     .limit(1);
   if (!existing) throw new Error('Movimiento no encontrado');
 
+  const legs = existing.transferId
+    ? await db
+        .select()
+        .from(transactions)
+        .where(
+          and(eq(transactions.userId, userId), eq(transactions.transferId, existing.transferId))
+        )
+    : [existing];
+
   const accs = await listAccounts(userId);
-  const acc = accs.find((a) => a.id === existing.accountId);
-  if (acc && isCheckingAccount(acc.type)) {
-    const pool = await getAccountBalancePool(userId, existing.accountId);
-    const next = applyPoolDelta(pool, {
-      accountsDelta: -asTxEffect(existing).accountsDelta,
-      savingsDelta: -asTxEffect(existing).savingsDelta,
-    });
-    assertGastableNonNegative(next);
+  for (const leg of legs) {
+    const acc = accs.find((a) => a.id === leg.accountId);
+    if (acc && isCheckingAccount(acc.type)) {
+      const pool = await getAccountBalancePool(userId, leg.accountId);
+      const next = applyPoolDelta(pool, {
+        accountsDelta: -asTxEffect(leg).accountsDelta,
+        savingsDelta: -asTxEffect(leg).savingsDelta,
+      });
+      assertGastableNonNegative(next);
+    }
+  }
+
+  if (existing.transferId) {
+    await db
+      .delete(transactions)
+      .where(
+        and(eq(transactions.userId, userId), eq(transactions.transferId, existing.transferId))
+      );
+    await db
+      .delete(transfers)
+      .where(and(eq(transfers.id, existing.transferId), eq(transfers.userId, userId)));
+    return;
   }
 
   await db.delete(transactions).where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
@@ -659,7 +704,15 @@ export async function deleteTransaction(userId: string, id: string) {
 
 export async function createTransfer(
   userId: string,
-  data: { fromAccountId: string; toAccountId: string; amount: number; note?: string }
+  data: {
+    fromAccountId: string;
+    toAccountId: string;
+    amount: number;
+    note?: string;
+    date?: Date;
+    /** Solo cuentas corrientes (transferencia manual entre corrientes). */
+    requireCheckingAccounts?: boolean;
+  }
 ) {
   if (data.fromAccountId === data.toAccountId) {
     throw new Error('Las cuentas deben ser distintas');
@@ -675,11 +728,22 @@ export async function createTransfer(
   if (isCreditAccount(from.type)) {
     throw new Error('No se puede transferir desde una cuenta de crédito');
   }
+
+  if (data.requireCheckingAccounts) {
+    const checking = accs.filter((a) => isCheckingAccount(a.type));
+    if (checking.length < MIN_ACCOUNTS_FOR_TRANSFER) {
+      throw new Error('Necesitas al menos dos cuentas corrientes para transferir');
+    }
+    if (!isCheckingAccount(from.type) || !isCheckingAccount(to.type)) {
+      throw new Error('La transferencia solo es entre cuentas corrientes');
+    }
+  }
+
   const pool = await getAccountBalancePool(userId, from.id);
   assertGastableNonNegative(applyPoolDelta(pool, { accountsDelta: -data.amount, savingsDelta: 0 }));
 
   const transferCat = await getOrCreateTransferCategory(userId);
-  const now = new Date();
+  const transferDate = data.date || new Date();
 
   const [transfer] = await db
     .insert(transfers)
@@ -697,7 +761,7 @@ export async function createTransfer(
       userId,
       type: 'gasto',
       amount: data.amount,
-      date: now,
+      date: transferDate,
       accountId: data.fromAccountId,
       categoryId: transferCat.id,
       note: data.note || `Transferencia a ${to.name}`,
@@ -707,7 +771,7 @@ export async function createTransfer(
       userId,
       type: 'ingreso',
       amount: data.amount,
-      date: now,
+      date: transferDate,
       accountId: data.toAccountId,
       categoryId: transferCat.id,
       note: data.note || `Transferencia desde ${from.name}`,
@@ -788,7 +852,7 @@ export async function createInstallmentPurchase(
     firstDueDate: Date;
     scheduleMode: 'consecutive' | 'billing_day';
     billingDay?: number;
-    categoryId: string;
+    categoryId?: string;
     note?: string;
   }
 ) {
@@ -805,6 +869,8 @@ export async function createInstallmentPurchase(
   if (credit.debt + data.totalAmount > limit) {
     throw new Error('La compra supera el cupo disponible');
   }
+
+  const categoryId = await resolveCategoryId(userId, data.categoryId);
 
   const amounts = splitInstallmentAmounts(data.totalAmount, data.installmentCount);
   const dueDates = buildInstallmentDueDates(
@@ -825,7 +891,7 @@ export async function createInstallmentPurchase(
       scheduleMode: data.scheduleMode,
       firstDueDate: data.firstDueDate,
       billingDay: data.scheduleMode === 'billing_day' ? data.billingDay || data.firstDueDate.getDate() : null,
-      categoryId: data.categoryId,
+      categoryId,
       note: data.note || null,
     })
     .returning();
@@ -838,7 +904,7 @@ export async function createInstallmentPurchase(
       amount: data.totalAmount,
       date: new Date(),
       accountId: data.creditAccountId,
-      categoryId: data.categoryId,
+      categoryId,
       note: data.note || `${INSTALLMENT_PURCHASE_NOTE} (${data.installmentCount}x)`,
       installmentPlanId: plan.id,
     })
