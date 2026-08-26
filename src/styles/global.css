@@ -131,12 +131,23 @@ h3,
   animation: lukita-spin 0.7s linear infinite;
 }
 
+@keyframes lukita-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.animate-pulse {
+  animation: lukita-pulse 1.2s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-up,
   .animate-fade-up-delay-1,
   .animate-fade-up-delay-2,
   .animate-fade-up-delay-3,
-  .animate-toast-in {
+  .animate-toast-in,
+  .animate-pulse {
     animation: none;
   }
 }

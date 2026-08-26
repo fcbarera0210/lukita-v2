@@ -1,16 +1,25 @@
 ---
 import AppLayout from '../../layouts/AppLayout.astro';
 import { formatCLP } from '../../lib/clp';
-import { listAccounts, listSavings } from '../../lib/data';
+import { loadAccountsAndSavings } from '../../lib/data';
 import { isCheckingAccount } from '../../lib/account-colors';
 
 const user = Astro.locals.user!;
 const accountParam = Astro.url.searchParams.get('accountId');
 
-let savings: Awaited<ReturnType<typeof listSavings>> = [];
-let accounts: Awaited<ReturnType<typeof listAccounts>> = [];
+let savings: Awaited<ReturnType<typeof loadAccountsAndSavings>>['savings'] = [];
+let accounts: Awaited<ReturnType<typeof loadAccountsAndSavings>>['accounts'] = [];
 try {
-  accounts = (await listAccounts(user.id)).filter((a) => isCheckingAccount(a.type));
+  const loaded = await loadAccountsAndSavings(user.id);
+  accounts = loaded.accounts.filter((a) => isCheckingAccount(a.type));
+  const selectedAccountId =
+    accounts.find((a) => a.id === accountParam)?.id ||
+    accounts.find((a) => a.isFavorite)?.id ||
+    accounts[0]?.id ||
+    '';
+  savings = selectedAccountId
+    ? loaded.savings.filter((s) => s.accountId === selectedAccountId)
+    : [];
 } catch {}
 
 const selectedAccountId =
@@ -18,12 +27,6 @@ const selectedAccountId =
   accounts.find((a) => a.isFavorite)?.id ||
   accounts[0]?.id ||
   '';
-
-try {
-  savings = selectedAccountId
-    ? await listSavings(user.id, { accountId: selectedAccountId })
-    : [];
-} catch {}
 
 const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
 ---

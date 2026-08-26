@@ -4,7 +4,15 @@ import { MoneyMovementForm } from '../../components/MoneyMovementForm';
 import { MovementDrawer } from '../../components/MovementDrawer';
 import { formatCLP } from '../../lib/clp';
 import { formatDate } from '../../lib/dates';
-import { listAccounts, listCategories, listSavings, listTransactions } from '../../lib/data';
+import {
+  MOVIMIENTOS_PAGE_SIZE,
+  countTransactions,
+  getTransaction,
+  listAccounts,
+  listCategories,
+  listSavings,
+  listTransactions,
+} from '../../lib/data';
 
 const user = Astro.locals.user!;
 const type = (Astro.url.searchParams.get('type') || '') as '' | 'ingreso' | 'gasto';
@@ -14,36 +22,52 @@ const fromParam = Astro.url.searchParams.get('from');
 const toParam = Astro.url.searchParams.get('to');
 const editId = Astro.url.searchParams.get('edit');
 const formError = Astro.url.searchParams.get('error') || '';
+const pageParam = Number(Astro.url.searchParams.get('page') || '1');
+const page = Number.isFinite(pageParam) && pageParam > 0 ? Math.floor(pageParam) : 1;
 
 const from = fromParam ? new Date(fromParam) : undefined;
 const to = toParam ? new Date(toParam) : undefined;
+
+const txFilters = {
+  type: type || undefined,
+  accountId: accountId || undefined,
+  note: note || undefined,
+  from,
+  to,
+} as const;
 
 let accounts: Awaited<ReturnType<typeof listAccounts>> = [];
 let categories: Awaited<ReturnType<typeof listCategories>> = [];
 let savings: Awaited<ReturnType<typeof listSavings>> = [];
 let txs: Awaited<ReturnType<typeof listTransactions>> = [];
+let totalCount = 0;
 
 try {
-  [accounts, categories, savings, txs] = await Promise.all([
-    listAccounts(user.id),
+  const [accs, cats, savs, count, rows] = await Promise.all([
+    listAccounts(user.id, { withBalances: false }),
     listCategories(user.id, { includeSystem: true }),
-    listSavings(user.id),
+    listSavings(user.id, { withTotals: false }),
+    countTransactions(user.id, txFilters),
     listTransactions(user.id, {
-      type: type || undefined,
-      accountId: accountId || undefined,
-      note: note || undefined,
-      from,
-      to,
+      ...txFilters,
+      limit: MOVIMIENTOS_PAGE_SIZE,
+      offset: (page - 1) * MOVIMIENTOS_PAGE_SIZE,
     }),
   ]);
+  accounts = accs;
+  categories = cats;
+  savings = savs;
+  totalCount = count;
+  txs = rows;
 } catch {}
+
+const totalPages = Math.max(1, Math.ceil(totalCount / MOVIMIENTOS_PAGE_SIZE));
 
 const editingFromList = editId ? txs.find((t) => t.id === editId) : undefined;
 let editing = editingFromList;
 if (editId && !editing) {
   try {
-    const all = await listTransactions(user.id);
-    editing = all.find((t) => t.id === editId);
+    editing = await getTransaction(user.id, editId);
   } catch {}
 }
 if (editing?.transferId) {
@@ -75,6 +99,32 @@ const closeHref = '/movimientos';
 const formTitle = 'Editar movimiento';
 const formReturnTo = editing ? `/movimientos?edit=${editing.id}` : '/movimientos';
 const showForm = Boolean(editId && editing);
+
+function buildMovimientosHref(nextPage: number) {
+  const params = new URLSearchParams();
+  if (type) params.set('type', type);
+  if (accountId) params.set('accountId', accountId);
+  if (fromParam) params.set('from', fromParam.slice(0, 10));
+  if (toParam) params.set('to', toParam.slice(0, 10));
+  if (note) params.set('note', note);
+  if (nextPage > 1) params.set('page', String(nextPage));
+  const q = params.toString();
+  return q ? `/movimientos?${q}` : '/movimientos';
+}
+
+const fromIdx = totalCount === 0 ? 0 : (page - 1) * MOVIMIENTOS_PAGE_SIZE + 1;
+const toIdx = Math.min(page * MOVIMIENTOS_PAGE_SIZE, totalCount);
+const filterReturnTo = (() => {
+  const params = new URLSearchParams();
+  if (type) params.set('type', type);
+  if (accountId) params.set('accountId', accountId);
+  if (fromParam) params.set('from', fromParam.slice(0, 10));
+  if (toParam) params.set('to', toParam.slice(0, 10));
+  if (note) params.set('note', note);
+  if (page > 1) params.set('page', String(page));
+  const q = params.toString();
+  return q ? `/movimientos?${q}` : '/movimientos';
+})();
 ---
 <AppLayout title="Movimientos · Lukita" pageTitle="Movimientos" pageDescription="Historial y filtros">
   <form method="GET" class="animate-fade-up surface mb-5 grid grid-cols-2 gap-2 rounded-2xl p-3 lg:grid-cols-6">
@@ -126,6 +176,17 @@ const showForm = Boolean(editId && editing);
     />
   </div>
 
+  <div class="mb-3 flex items-center justify-between gap-3 text-xs text-[var(--color-muted-foreground)]">
+    <p>
+      {totalCount === 0
+        ? 'Sin resultados'
+        : `Mostrando ${fromIdx}–${toIdx} de ${totalCount}`}
+    </p>
+    {totalPages > 1 && (
+      <p class="tabular-nums">Pág. {page} / {totalPages}</p>
+    )}
+  </div>
+
   <div class="space-y-2 lg:hidden">
     {txs.length === 0 ? (
       <p class="rounded-2xl border border-dashed border-[var(--color-border)] p-6 text-center text-sm text-[var(--color-muted-foreground)]">No hay movimientos</p>
@@ -162,7 +223,7 @@ const showForm = Boolean(editId && editing);
                 }
               >
                 <input type="hidden" name="intent" value="delete_transaction" />
-                <input type="hidden" name="returnTo" value="/movimientos" />
+                <input type="hidden" name="returnTo" value={filterReturnTo} />
                 <input type="hidden" name="id" value={t.id} />
                 <button type="submit" class="text-xs font-semibold text-red-600 dark:text-red-400">Eliminar</button>
               </form>
@@ -214,16 +275,16 @@ const showForm = Boolean(editId && editing);
                         <a href={`/movimientos?edit=${t.id}`} class="font-semibold text-[var(--color-primary)]">Editar</a>
                       )}
                       <form
-                method="POST"
-                action="/api/actions"
-                onsubmit={
-                  t.transferId
-                    ? "return confirm('¿Eliminar esta transferencia? Se borrarán ambos movimientos vinculados.')"
-                    : "return confirm('¿Eliminar?')"
-                }
-              >
+                        method="POST"
+                        action="/api/actions"
+                        onsubmit={
+                          t.transferId
+                            ? "return confirm('¿Eliminar esta transferencia? Se borrarán ambos movimientos vinculados.')"
+                            : "return confirm('¿Eliminar?')"
+                        }
+                      >
                         <input type="hidden" name="intent" value="delete_transaction" />
-                        <input type="hidden" name="returnTo" value="/movimientos" />
+                        <input type="hidden" name="returnTo" value={filterReturnTo} />
                         <input type="hidden" name="id" value={t.id} />
                         <button type="submit" class="font-semibold text-red-600 dark:text-red-400">Eliminar</button>
                       </form>
@@ -237,4 +298,29 @@ const showForm = Boolean(editId && editing);
       </div>
     )}
   </div>
+
+  {totalPages > 1 && (
+    <div class="mt-4 flex items-center justify-between gap-3">
+      {page > 1 ? (
+        <a
+          href={buildMovimientosHref(page - 1)}
+          class="rounded-xl border border-[var(--color-border)] px-3 py-2 text-sm font-semibold transition-colors hover:bg-[var(--color-muted)]"
+        >
+          ← Anterior
+        </a>
+      ) : (
+        <span class="px-3 py-2 text-sm text-[var(--color-muted-foreground)]">← Anterior</span>
+      )}
+      {page < totalPages ? (
+        <a
+          href={buildMovimientosHref(page + 1)}
+          class="rounded-xl border border-[var(--color-border)] px-3 py-2 text-sm font-semibold transition-colors hover:bg-[var(--color-muted)]"
+        >
+          Siguiente →
+        </a>
+      ) : (
+        <span class="px-3 py-2 text-sm text-[var(--color-muted-foreground)]">Siguiente →</span>
+      )}
+    </div>
+  )}
 </AppLayout>

@@ -10,7 +10,7 @@ import { TransferForm } from '../components/TransferForm';
 import { formatCLP } from '../lib/clp';
 import { categoryEmoji } from '../lib/category-emoji';
 import { formatDate, formatPeriodLabel, getPeriodFromCutoff, shiftPeriod } from '../lib/dates';
-import { listAccounts, listCategories, listInstallments, listSavings, listTransactions, periodSummary } from '../lib/data';
+import { listAccounts, listCategories, listInstallments, loadAccountsAndSavings, periodSummaryFromTransactions, recentTransactionsFrom } from '../lib/data';
 import { calculateAccountGastable, sumBalances } from '../lib/balances';
 import { getColorById, isCreditAccount, isCheckingAccount, MIN_ACCOUNTS_FOR_TRANSFER } from '../lib/account-colors';
 
@@ -31,16 +31,39 @@ const nextPivot = shiftPeriod(pivot, user.monthCutoffDay, 1);
 let accounts: Awaited<ReturnType<typeof listAccounts>> = [];
 let categories: Awaited<ReturnType<typeof listCategories>> = [];
 let categoriesAll: Awaited<ReturnType<typeof listCategories>> = [];
-let savingsList: Awaited<ReturnType<typeof listSavings>> = [];
+let savingsList: Awaited<ReturnType<typeof loadAccountsAndSavings>>['savings'] = [];
 let installmentsList: Awaited<ReturnType<typeof listInstallments>> = [];
-let summary = { income: 0, expense: 0, transactions: [] as Awaited<ReturnType<typeof listTransactions>> };
-let recent: Awaited<ReturnType<typeof listTransactions>> = [];
+let summary = { income: 0, expense: 0, transactions: [] as Awaited<ReturnType<typeof recentTransactionsFrom>> };
+let recent: Awaited<ReturnType<typeof recentTransactionsFrom>> = [];
 let loadError = '';
 
 try {
-  accounts = await listAccounts(user.id);
-  categoriesAll = await listCategories(user.id, { includeSystem: true });
-  categories = categoriesAll.filter((c) => !c.isSystem);
+  const [{ accounts: accs, savings: savs, transactions: allTxs }, cats] = await Promise.all([
+    loadAccountsAndSavings(user.id),
+    listCategories(user.id, { includeSystem: true }),
+  ]);
+  accounts = accs;
+  categoriesAll = cats;
+  categories = cats.filter((c) => !c.isSystem);
+
+  const active =
+    accounts.find((a) => a.id === accountParam) ||
+    accounts.find((a) => a.isFavorite) ||
+    accounts[0] ||
+    null;
+
+  if (active) {
+    const credit = isCreditAccount(active.type);
+    savingsList = credit ? [] : savs.filter((s) => s.accountId === active.id);
+    summary = periodSummaryFromTransactions(allTxs, periodStart, periodEnd, active.id);
+    recent = recentTransactionsFrom(allTxs, {
+      accountId: active.id,
+      limit: user.dashboardRecentCount,
+    });
+    if (credit) {
+      installmentsList = await listInstallments(user.id, { creditAccountId: active.id });
+    }
+  }
 } catch (e) {
   loadError = e instanceof Error ? e.message : 'Error al cargar datos';
 }
@@ -53,22 +76,6 @@ const activeAccount =
 
 const isCredit = activeAccount ? isCreditAccount(activeAccount.type) : false;
 const checkingAccounts = accounts.filter((a) => isCheckingAccount(a.type));
-
-if (activeAccount) {
-  try {
-    savingsList = isCredit ? [] : await listSavings(user.id, { accountId: activeAccount.id });
-    summary = await periodSummary(user.id, periodStart, periodEnd, activeAccount.id);
-    recent = await listTransactions(user.id, {
-      accountId: activeAccount.id,
-      limit: user.dashboardRecentCount,
-    });
-    if (isCredit) {
-      installmentsList = await listInstallments(user.id, { creditAccountId: activeAccount.id });
-    }
-  } catch (e) {
-    loadError = e instanceof Error ? e.message : 'Error al cargar datos';
-  }
-}
 
 const savingsTotal = sumBalances(savingsList.map((s) => s.total));
 const accountGastable = activeAccount && !isCredit

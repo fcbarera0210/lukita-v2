@@ -3,6 +3,7 @@ import BaseLayout from './BaseLayout.astro';
 import { BottomNav } from '../components/BottomNav';
 import { AppSidebar } from '../components/AppSidebar';
 import { UserMenu } from '../components/UserMenu';
+import { NavigationFeedback } from '../components/NavigationFeedback';
 
 interface Props {
   title?: string;
@@ -17,7 +18,13 @@ const heading = pageTitle || title.replace(/\s·\sLukita$/, '');
 ---
 <BaseLayout title={title} user={user}>
   <div class="min-h-dvh lg:pl-60">
-    <AppSidebar client:load currentPath={path} />
+    <div
+      id="app-sidebar"
+      class="fixed inset-y-0 left-0 z-40 hidden w-60 border-r border-[var(--color-border)] bg-[var(--color-sidebar)] lg:block"
+      transition:persist="app-sidebar"
+    >
+      <AppSidebar client:load currentPath={path} />
+    </div>
 
     <div class="mx-auto flex min-h-dvh max-w-6xl flex-col pb-24 lg:pb-8">
       <header class="sticky top-0 z-30 border-b border-[var(--color-border)] bg-[color-mix(in_oklab,var(--color-background)_82%,transparent)] px-4 py-3 backdrop-blur-md sm:px-6">
@@ -44,13 +51,15 @@ const heading = pageTitle || title.replace(/\s·\sLukita$/, '');
         </div>
       </header>
 
-      <main class="flex-1 px-4 py-5 sm:px-6">
+      <main id="app-main" class="flex-1 px-4 py-5 sm:px-6">
         <slot />
       </main>
     </div>
   </div>
 
-  <div class="lg:hidden">
+  <div id="app-bottom-nav" class="lg:hidden" transition:persist="app-bottom-nav">
     <BottomNav client:load currentPath={path} />
   </div>
+
+  <NavigationFeedback client:load />
 </BaseLayout>

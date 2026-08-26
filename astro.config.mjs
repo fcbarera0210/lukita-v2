@@ -8,6 +8,10 @@ export default defineConfig({
   output: 'server',
   adapter: vercel(),
   integrations: [react()],
+  prefetch: {
+    prefetchAll: false,
+    defaultStrategy: 'hover',
+  },
   vite: {
     plugins: [tailwindcss()],
   },

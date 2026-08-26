@@ -9,6 +9,7 @@ import {
   PiggyBank,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useNavPath } from './useNavPath';
 
 const navItems = [
   { href: '/', label: 'Inicio', icon: Home },
@@ -20,19 +21,24 @@ const navItems = [
 ];
 
 export function AppSidebar({ currentPath }: { currentPath: string }) {
+  const { activePath, onNavClick } = useNavPath(currentPath);
+
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-[var(--color-border)] bg-[var(--color-sidebar)] lg:flex">
+    <aside className="flex h-full w-full flex-col">
       <div className="flex h-16 items-center gap-3 border-b border-[var(--color-border)] px-5">
         <img src="/logo-lukita.svg" alt="Lukita" className="h-8" />
       </div>
       <nav className="flex flex-1 flex-col gap-1 p-3">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const active = item.href === '/' ? currentPath === '/' : currentPath.startsWith(item.href);
+          const active = item.href === '/' ? activePath === '/' : activePath.startsWith(item.href);
           return (
             <a
               key={item.href}
               href={item.href}
+              data-astro-prefetch="hover"
+              onClick={onNavClick}
+              aria-current={active ? 'page' : undefined}
               className={cn(
                 'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200',
                 active

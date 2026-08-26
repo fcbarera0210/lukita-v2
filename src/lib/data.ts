@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, lte, ilike } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, lte, ilike } from 'drizzle-orm';
 import { addMonths, setDate, startOfDay } from 'date-fns';
 import { getDb } from '../db';
 import {
@@ -12,6 +12,10 @@ import {
   users,
   type Category,
 } from '../db/schema';
+
+type AccountRow = typeof accounts.$inferSelect;
+type SavingRow = typeof savings.$inferSelect;
+type TransactionRow = typeof transactions.$inferSelect;
 import {
   applyPoolDelta,
   assertGastableNonNegative,
@@ -56,33 +60,8 @@ function sortAccounts<T extends { isFavorite: boolean; createdAt: Date }>(rows: 
   });
 }
 
-export async function getAccountBalancePool(userId: string, accountId: string): Promise<BalancePool> {
-  const accs = await listAccounts(userId);
-  const acc = accs.find((a) => a.id === accountId);
-  if (!acc) throw new Error('Cuenta no encontrada');
-  if (isCreditAccount(acc.type)) {
-    return makeBalancePool(0, 0);
-  }
-  const savs = await listSavings(userId, { accountId });
-  return makeBalancePool(acc.balance, sumBalances(savs.map((s) => s.total)));
-}
-
-/** Pool de todas las corrientes (validaciones globales residuales). */
-export async function getBalancePool(userId: string): Promise<BalancePool> {
-  const accs = await listAccounts(userId);
-  const corrientes = accs.filter((a) => isCheckingAccount(a.type));
-  const savs = await listSavings(userId);
-  return makeBalancePool(
-    sumBalances(corrientes.map((a) => a.balance)),
-    sumBalances(savs.map((s) => s.total))
-  );
-}
-
-export async function listAccounts(userId: string) {
-  const db = getDb();
-  const rows = await db.select().from(accounts).where(eq(accounts.userId, userId));
-  const txs = await db.select().from(transactions).where(eq(transactions.userId, userId));
-  const mapped = rows.map((a) => {
+function mapAccountsWithBalances(rows: AccountRow[], txs: TransactionRow[]) {
+  return rows.map((a) => {
     if (isCreditAccount(a.type)) {
       const debt = calculateCreditDebt(a.initialBalance, txs, a.id);
       const limit = a.creditLimit ?? 0;
@@ -101,7 +80,119 @@ export async function listAccounts(userId: string) {
       creditAvailable: 0,
     };
   });
-  return sortAccounts(mapped);
+}
+
+function mapSavingsWithTotals(rows: SavingRow[], txs: TransactionRow[], accRows: AccountRow[]) {
+  return rows.map((s) => ({
+    ...s,
+    total: calculateSavingTotal(s.baseAmount, s.id, txs),
+    accountName: accRows.find((a) => a.id === s.accountId)?.name,
+  }));
+}
+
+async function fetchUserTransactions(userId: string) {
+  const db = getDb();
+  return db.select().from(transactions).where(eq(transactions.userId, userId));
+}
+
+/** Carga cuentas + ahorros con una sola lectura de transacciones. */
+export async function loadAccountsAndSavings(
+  userId: string,
+  opts?: { accountId?: string; skipSavings?: boolean }
+) {
+  const db = getDb();
+  const savConditions = [eq(savings.userId, userId)];
+  if (opts?.accountId) savConditions.push(eq(savings.accountId, opts.accountId));
+
+  const [accRows, savRows, txs] = await Promise.all([
+    db.select().from(accounts).where(eq(accounts.userId, userId)),
+    opts?.skipSavings
+      ? Promise.resolve([] as SavingRow[])
+      : db
+          .select()
+          .from(savings)
+          .where(and(...savConditions))
+          .orderBy(desc(savings.createdAt)),
+    fetchUserTransactions(userId),
+  ]);
+
+  return {
+    accounts: sortAccounts(mapAccountsWithBalances(accRows, txs)),
+    savings: mapSavingsWithTotals(savRows, txs, accRows),
+    transactions: txs,
+  };
+}
+
+export function periodSummaryFromTransactions(
+  txs: TransactionRow[],
+  from: Date,
+  to: Date,
+  accountId?: string
+) {
+  let income = 0;
+  let expense = 0;
+  const filtered: TransactionRow[] = [];
+  const fromMs = from.getTime();
+  const toMs = to.getTime();
+  for (const t of txs) {
+    if (accountId && t.accountId !== accountId) continue;
+    const ms = new Date(t.date).getTime();
+    if (ms < fromMs || ms > toMs) continue;
+    filtered.push(t);
+    if (t.type === 'gasto') expense += t.amount;
+    else if (t.type === 'ingreso' && !t.savingsId) income += t.amount;
+  }
+  return { income, expense, transactions: filtered };
+}
+
+export function recentTransactionsFrom(
+  txs: TransactionRow[],
+  opts: { accountId?: string; limit: number }
+) {
+  const filtered = opts.accountId ? txs.filter((t) => t.accountId === opts.accountId) : txs;
+  return [...filtered]
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, opts.limit);
+}
+
+export async function getAccountBalancePool(userId: string, accountId: string): Promise<BalancePool> {
+  const { accounts: accs, savings: savs } = await loadAccountsAndSavings(userId, { accountId });
+  const acc = accs.find((a) => a.id === accountId);
+  if (!acc) throw new Error('Cuenta no encontrada');
+  if (isCreditAccount(acc.type)) {
+    return makeBalancePool(0, 0);
+  }
+  return makeBalancePool(acc.balance, sumBalances(savs.map((s) => s.total)));
+}
+
+/** Pool de todas las corrientes (validaciones globales residuales). */
+export async function getBalancePool(userId: string): Promise<BalancePool> {
+  const { accounts: accs, savings: savs } = await loadAccountsAndSavings(userId);
+  const corrientes = accs.filter((a) => isCheckingAccount(a.type));
+  return makeBalancePool(
+    sumBalances(corrientes.map((a) => a.balance)),
+    sumBalances(savs.map((s) => s.total))
+  );
+}
+
+export async function listAccounts(
+  userId: string,
+  opts?: { withBalances?: boolean; transactions?: TransactionRow[] }
+) {
+  const db = getDb();
+  const rows = await db.select().from(accounts).where(eq(accounts.userId, userId));
+  if (opts?.withBalances === false) {
+    return sortAccounts(
+      rows.map((a) => ({
+        ...a,
+        balance: 0,
+        debt: 0,
+        creditAvailable: 0,
+      }))
+    );
+  }
+  const txs = opts?.transactions ?? (await fetchUserTransactions(userId));
+  return sortAccounts(mapAccountsWithBalances(rows, txs));
 }
 
 export async function createAccount(
@@ -360,7 +451,15 @@ async function resolveCategoryId(
   return uncategorized.id;
 }
 
-export async function listSavings(userId: string, opts?: { accountId?: string }) {
+export async function listSavings(
+  userId: string,
+  opts?: {
+    accountId?: string;
+    withTotals?: boolean;
+    transactions?: TransactionRow[];
+    accountRows?: AccountRow[];
+  }
+) {
   const db = getDb();
   const conditions = [eq(savings.userId, userId)];
   if (opts?.accountId) conditions.push(eq(savings.accountId, opts.accountId));
@@ -369,13 +468,23 @@ export async function listSavings(userId: string, opts?: { accountId?: string })
     .from(savings)
     .where(and(...conditions))
     .orderBy(desc(savings.createdAt));
-  const txs = await db.select().from(transactions).where(eq(transactions.userId, userId));
-  const accs = await db.select().from(accounts).where(eq(accounts.userId, userId));
-  return rows.map((s) => ({
-    ...s,
-    total: calculateSavingTotal(s.baseAmount, s.id, txs),
-    accountName: accs.find((a) => a.id === s.accountId)?.name,
-  }));
+
+  if (opts?.withTotals === false) {
+    const accRows =
+      opts.accountRows ??
+      (await db.select().from(accounts).where(eq(accounts.userId, userId)));
+    return rows.map((s) => ({
+      ...s,
+      total: 0,
+      accountName: accRows.find((a) => a.id === s.accountId)?.name,
+    }));
+  }
+
+  const txs = opts?.transactions ?? (await fetchUserTransactions(userId));
+  const accRows =
+    opts?.accountRows ??
+    (await db.select().from(accounts).where(eq(accounts.userId, userId)));
+  return mapSavingsWithTotals(rows, txs, accRows);
 }
 
 export async function createSaving(
@@ -465,26 +574,61 @@ export type TxFilters = {
   to?: Date;
   note?: string;
   limit?: number;
+  offset?: number;
 };
 
-export async function listTransactions(userId: string, filters: TxFilters = {}) {
-  const db = getDb();
+function buildTxConditions(userId: string, filters: TxFilters) {
   const conditions = [eq(transactions.userId, userId)];
   if (filters.type) conditions.push(eq(transactions.type, filters.type));
   if (filters.accountId) conditions.push(eq(transactions.accountId, filters.accountId));
   if (filters.from) conditions.push(gte(transactions.date, filters.from));
   if (filters.to) conditions.push(lte(transactions.date, filters.to));
   if (filters.note) conditions.push(ilike(transactions.note, `%${filters.note}%`));
+  return conditions;
+}
 
-  const q = db
+export async function listTransactions(userId: string, filters: TxFilters = {}) {
+  const db = getDb();
+  const conditions = buildTxConditions(userId, filters);
+  const base = db
     .select()
     .from(transactions)
     .where(and(...conditions))
     .orderBy(desc(transactions.date));
 
-  const rows = filters.limit ? await q.limit(filters.limit) : await q;
-  return rows;
+  if (filters.limit !== undefined && filters.offset !== undefined) {
+    return base.limit(filters.limit).offset(filters.offset);
+  }
+  if (filters.limit !== undefined) {
+    return base.limit(filters.limit);
+  }
+  if (filters.offset !== undefined) {
+    return base.offset(filters.offset);
+  }
+  return base;
 }
+
+export async function countTransactions(userId: string, filters: TxFilters = {}) {
+  const db = getDb();
+  const conditions = buildTxConditions(userId, filters);
+  const [row] = await db
+    .select({ value: count() })
+    .from(transactions)
+    .where(and(...conditions));
+  return Number(row?.value || 0);
+}
+
+export async function getTransaction(userId: string, id: string) {
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(transactions)
+    .where(and(eq(transactions.userId, userId), eq(transactions.id, id)))
+    .limit(1);
+  return row ?? null;
+}
+
+export const MOVIMIENTOS_PAGE_SIZE = 30;
 
 export async function createTransaction(
   userId: string,
